@@ -14,6 +14,12 @@ router.get(
   // checkPermission('VIEW_SHOP'),
   sellController.getAllSellsuser,
 );
+router.get(
+  '/api/sells/user/based/web',
+  auth,
+  // checkPermission('VIEW_SHOP'), getAllSellsuserweb
+  sellController.getAllSellsuserweb,
+);
 
 // Get a sell by ID
 router.get(
@@ -41,6 +47,12 @@ router.get(
 );
 
 router.get('/api/sells/store/getAll', auth, sellController.getAllSellsForStore);
+
+router.get(
+  '/api/sells/store/getAll/web',
+  auth,
+  sellController.getAllSellsForStoreweb,
+);
 
 // Update a sell
 router.put(

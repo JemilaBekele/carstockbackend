@@ -1865,6 +1865,522 @@ const getAllSellsuser = async ({
   const whereClause = {
     createdById: userId,
   };
+
+  // DETECT DEFAULT VIEW: Check if any filters are applied
+  const isDefaultView =
+    !status && !startDate && !endDate && !customerName && page === 1;
+
+  // For default view: Show all NOT_APPROVED and PARTIALLY_DELIVERED, plus last 10 DELIVERED
+  if (isDefaultView) {
+    // Get last 10 delivered sales
+    const lastDeliveredQuery = {
+      createdById: userId,
+      saleStatus: 'DELIVERED',
+    };
+
+    // Add date filtering for delivered sales (last 3 months for performance)
+    const threeMonthsAgo = new Date();
+    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+    lastDeliveredQuery.createdAt = { gte: threeMonthsAgo };
+
+    const [
+      lastDeliveredSells,
+      notApprovedSells,
+      partiallyDeliveredSells,
+      approvedSells, // NEW: Get all APPROVED sales
+      cancelledSells, // NEW: Get all CANCELLED sales
+    ] = await Promise.all([
+      // Get last 10 delivered sales
+      prisma.sell.findMany({
+        where: lastDeliveredQuery,
+        orderBy: { createdAt: 'desc' },
+        take: 10,
+        include: {
+          branch: true,
+          customer: true,
+          createdBy: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+          items: {
+            include: {
+              product: {
+                include: {
+                  unitOfMeasure: true,
+                  category: true,
+                },
+              },
+              shop: true,
+              unitOfMeasure: true,
+              batches: {
+                include: {
+                  batch: {
+                    include: {
+                      product: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+          SellStockCorrection: {
+            select: {
+              id: true,
+              status: true,
+            },
+          },
+          _count: {
+            select: { items: true },
+          },
+        },
+      }),
+
+      // Get all NOT_APPROVED sales
+      prisma.sell.findMany({
+        where: {
+          createdById: userId,
+          saleStatus: 'NOT_APPROVED',
+        },
+        orderBy: { createdAt: 'desc' },
+        include: {
+          branch: true,
+          customer: true,
+          createdBy: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+          items: {
+            include: {
+              product: {
+                include: {
+                  unitOfMeasure: true,
+                  category: true,
+                },
+              },
+              shop: true,
+              unitOfMeasure: true,
+              batches: {
+                include: {
+                  batch: {
+                    include: {
+                      product: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+          SellStockCorrection: {
+            select: {
+              id: true,
+              status: true,
+            },
+          },
+          _count: {
+            select: { items: true },
+          },
+        },
+      }),
+
+      // Get all PARTIALLY_DELIVERED sales
+      prisma.sell.findMany({
+        where: {
+          createdById: userId,
+          saleStatus: 'PARTIALLY_DELIVERED',
+        },
+        orderBy: { createdAt: 'desc' },
+        include: {
+          branch: true,
+          customer: true,
+          createdBy: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+          items: {
+            include: {
+              product: {
+                include: {
+                  unitOfMeasure: true,
+                  category: true,
+                },
+              },
+              shop: true,
+              unitOfMeasure: true,
+              batches: {
+                include: {
+                  batch: {
+                    include: {
+                      product: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+          SellStockCorrection: {
+            select: {
+              id: true,
+              status: true,
+            },
+          },
+          _count: {
+            select: { items: true },
+          },
+        },
+      }),
+
+      // NEW: Get all APPROVED sales
+      prisma.sell.findMany({
+        where: {
+          createdById: userId,
+          saleStatus: 'APPROVED',
+        },
+        orderBy: { createdAt: 'desc' },
+        include: {
+          branch: true,
+          customer: true,
+          createdBy: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+          items: {
+            include: {
+              product: {
+                include: {
+                  unitOfMeasure: true,
+                  category: true,
+                },
+              },
+              shop: true,
+              unitOfMeasure: true,
+              batches: {
+                include: {
+                  batch: {
+                    include: {
+                      product: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+          SellStockCorrection: {
+            select: {
+              id: true,
+              status: true,
+            },
+          },
+          _count: {
+            select: { items: true },
+          },
+        },
+      }),
+
+      // NEW: Get all CANCELLED sales
+      prisma.sell.findMany({
+        where: {
+          createdById: userId,
+          saleStatus: 'CANCELLED',
+        },
+        orderBy: { createdAt: 'desc' },
+        include: {
+          branch: true,
+          customer: true,
+          createdBy: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+          items: {
+            include: {
+              product: {
+                include: {
+                  unitOfMeasure: true,
+                  category: true,
+                },
+              },
+              shop: true,
+              unitOfMeasure: true,
+              batches: {
+                include: {
+                  batch: {
+                    include: {
+                      product: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
+          SellStockCorrection: {
+            select: {
+              id: true,
+              status: true,
+            },
+          },
+          _count: {
+            select: { items: true },
+          },
+        },
+      }),
+    ]);
+
+    // Combine all results - NOW INCLUDES ALL STATUSES
+    const allSells = [
+      ...notApprovedSells,
+      ...partiallyDeliveredSells,
+      ...approvedSells, // Added
+      ...cancelledSells, // Added
+      ...lastDeliveredSells, // Last 10 delivered only
+    ];
+
+    // Sort by createdAt descending
+    allSells.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    // Get counts for each status
+    const [
+      notApprovedCount,
+      partiallyDeliveredCount,
+      approvedCount, // NEW
+      cancelledCount, // NEW
+      deliveredCount,
+    ] = await Promise.all([
+      prisma.sell.count({
+        where: {
+          createdById: userId,
+          saleStatus: 'NOT_APPROVED',
+        },
+      }),
+      prisma.sell.count({
+        where: {
+          createdById: userId,
+          saleStatus: 'PARTIALLY_DELIVERED',
+        },
+      }),
+      prisma.sell.count({
+        // NEW
+        where: {
+          createdById: userId,
+          saleStatus: 'APPROVED',
+        },
+      }),
+      prisma.sell.count({
+        // NEW
+        where: {
+          createdById: userId,
+          saleStatus: 'CANCELLED',
+        },
+      }),
+      prisma.sell.count({
+        where: {
+          createdById: userId,
+          saleStatus: 'DELIVERED',
+        },
+      }),
+    ]);
+
+    return {
+      sells: allSells,
+      count: allSells.length,
+      totalCount:
+        notApprovedCount +
+        partiallyDeliveredCount +
+        approvedCount +
+        cancelledCount +
+        deliveredCount,
+      isDefaultView: true, // Flag to indicate this is default view
+      statusCounts: {
+        NOT_APPROVED: notApprovedCount,
+        PARTIALLY_DELIVERED: partiallyDeliveredCount,
+        APPROVED: approvedCount,
+        CANCELLED: cancelledCount,
+        DELIVERED: deliveredCount,
+      },
+    };
+  }
+
+  // REGULAR FILTERING LOGIC (when user applies any filter)
+
+  // Fix: Use saleStatus instead of status
+  if (status) {
+    // Handle multiple statuses (comma-separated) or single status
+    if (status.includes(',')) {
+      const statuses = status
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s);
+      if (statuses.length > 0) {
+        // Fix: Use saleStatus field name
+        whereClause.saleStatus = { in: statuses };
+      }
+    } else {
+      // Fix: Use saleStatus field name
+      whereClause.saleStatus = status;
+    }
+  }
+
+  // Handle date filtering
+  try {
+    if (startDate && endDate) {
+      // Both dates provided
+      const startOfRange = new Date(startDate);
+      const endOfRange = new Date(endDate);
+
+      if (
+        Number.isNaN(startOfRange.getTime()) ||
+        Number.isNaN(endOfRange.getTime())
+      ) {
+        throw new Error('Invalid date format');
+      }
+
+      // Set start to beginning of day, end to end of day
+      startOfRange.setHours(0, 0, 0, 0);
+      endOfRange.setHours(23, 59, 59, 999);
+
+      whereClause.createdAt = {
+        gte: startOfRange,
+        lte: endOfRange,
+      };
+    } else if (startDate && !endDate) {
+      // Only start date provided
+      const startOfRange = new Date(startDate);
+      if (Number.isNaN(startOfRange.getTime())) {
+        throw new Error('Invalid start date format');
+      }
+      startOfRange.setHours(0, 0, 0, 0);
+      whereClause.createdAt = { gte: startOfRange };
+    } else if (endDate && !startDate) {
+      // Only end date provided
+      const endOfRange = new Date(endDate);
+      if (Number.isNaN(endOfRange.getTime())) {
+        throw new Error('Invalid end date format');
+      }
+      endOfRange.setHours(23, 59, 59, 999);
+      const twelveMonthsAgo = new Date();
+      twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
+
+      whereClause.createdAt = {
+        gte: twelveMonthsAgo,
+        lte: endOfRange,
+      };
+    } else {
+      // No dates provided, default to last 12 months
+      const twelveMonthsAgo = new Date();
+      twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
+      whereClause.createdAt = { gte: twelveMonthsAgo };
+    }
+  } catch (error) {
+    throw new Error(`Invalid date: ${error.message}`);
+  }
+
+  // Calculate pagination
+  const skip = (page - 1) * limit;
+
+  // Execute the query with pagination
+  const [sells, totalCount] = await Promise.all([
+    prisma.sell.findMany({
+      where: whereClause,
+      orderBy: { createdAt: 'desc' },
+      skip,
+      take: limit,
+      include: {
+        branch: true,
+        customer: true,
+        createdBy: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        items: {
+          include: {
+            product: {
+              include: {
+                unitOfMeasure: true,
+                category: true,
+              },
+            },
+            shop: true,
+            unitOfMeasure: true,
+            batches: {
+              include: {
+                batch: {
+                  include: {
+                    product: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        SellStockCorrection: {
+          select: {
+            id: true,
+            status: true,
+          },
+        },
+        _count: {
+          select: { items: true },
+        },
+      },
+    }),
+    prisma.sell.count({
+      where: whereClause,
+    }),
+  ]);
+
+  // Apply customer name filtering in memory if needed
+  let filteredSells = sells;
+  if (customerName && customerName.trim()) {
+    const customerNameLower = customerName.trim().toLowerCase();
+    filteredSells = sells.filter(
+      (sell) =>
+        sell.customer &&
+        sell.customer.name &&
+        sell.customer.name.toLowerCase().includes(customerNameLower),
+    );
+  }
+
+  return {
+    sells: filteredSells,
+    count: filteredSells.length,
+    totalCount,
+    isDefaultView: false, // Flag to indicate this is filtered view
+  };
+};
+const getAllSellsuserweb = async ({
+  startDate,
+  endDate,
+  userId,
+  customerName,
+  status, // This parameter should actually be called saleStatus for clarity
+  page = 1,
+  limit = 20,
+}) => {
+  // Validate required parameters
+  if (!userId) {
+    throw new Error('User ID is required');
+  }
+
+  // Initialize where clause with required condition
+  const whereClause = {
+    createdById: userId,
+  };
   // Fix: Use saleStatus instead of status
   if (status) {
     // Handle multiple statuses (comma-separated) or single status
@@ -2063,9 +2579,469 @@ const getAllSellsuser = async ({
     totalCount,
   };
 };
-
 // Get all Sells filtered by user's shops
 const getAllSellsForStore = async ({
+  startDate,
+  endDate,
+  userId,
+  customerName,
+  salesPersonName,
+  status,
+} = {}) => {
+  // Validate required parameters
+  if (!userId) {
+    throw new Error('User ID is required');
+  }
+
+  // Get user's shops
+  const userWithShops = await prisma.user.findUnique({
+    where: { id: userId },
+    select: {
+      shops: {
+        select: { id: true },
+      },
+    },
+  });
+
+  if (!userWithShops || userWithShops.shops.length === 0) {
+    return {
+      sells: [],
+      count: 0,
+      totalCount: 0,
+      isDefaultView: false,
+    };
+  }
+
+  const userShopIds = userWithShops.shops.map((shop) => shop.id);
+
+  // DETECT DEFAULT VIEW: Check if any filters are applied
+  const hasNoStatusFilter =
+    !status ||
+    (typeof status === 'string' && status.trim() === '') ||
+    status === 'all';
+  const hasNoDateFilter = !startDate && !endDate;
+  const hasNoCustomerFilter = !customerName || customerName.trim() === '';
+  const hasNoSalesPersonFilter =
+    !salesPersonName || salesPersonName.trim() === '';
+
+  const isDefaultView =
+    hasNoStatusFilter &&
+    hasNoDateFilter &&
+    hasNoCustomerFilter &&
+    hasNoSalesPersonFilter;
+
+  // For default view: Show all PARTIALLY_DELIVERED and APPROVED, plus last 10 DELIVERED
+  // EXCLUDE: NOT_APPROVED and CANCELLED
+  if (isDefaultView) {
+    try {
+      // Common where clause for shop filtering
+      const shopFilter = {
+        some: {
+          shopId: {
+            in: userShopIds,
+          },
+        },
+      };
+
+      // Get last 10 delivered sales
+      const lastDeliveredQuery = {
+        saleStatus: 'DELIVERED',
+        items: shopFilter,
+      };
+
+      // Add date filtering for delivered sales (last 3 months for performance)
+      const threeMonthsAgo = new Date();
+      threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+      lastDeliveredQuery.saleDate = { gte: threeMonthsAgo };
+
+      const [lastDeliveredSells, partiallyDeliveredSells, approvedSells] =
+        await Promise.all([
+          // Get last 10 delivered sales
+          prisma.sell.findMany({
+            where: lastDeliveredQuery,
+            orderBy: { saleDate: 'desc' },
+            take: 10,
+            include: {
+              branch: true,
+              customer: true,
+              createdBy: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                },
+              },
+              items: {
+                where: {
+                  shopId: {
+                    in: userShopIds,
+                  },
+                },
+                include: {
+                  product: {
+                    include: {
+                      unitOfMeasure: true,
+                      category: true,
+                    },
+                  },
+                  shop: true,
+                  unitOfMeasure: true,
+                  batches: {
+                    include: {
+                      batch: {
+                        include: {
+                          product: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+              SellStockCorrection: {
+                select: {
+                  id: true,
+                  status: true,
+                },
+              },
+              _count: {
+                select: { items: true },
+              },
+            },
+          }),
+
+          // Get all PARTIALLY_DELIVERED sales
+          prisma.sell.findMany({
+            where: {
+              saleStatus: 'PARTIALLY_DELIVERED',
+              items: shopFilter,
+            },
+            orderBy: { saleDate: 'desc' },
+            include: {
+              branch: true,
+              customer: true,
+              createdBy: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                },
+              },
+              items: {
+                where: {
+                  shopId: {
+                    in: userShopIds,
+                  },
+                },
+                include: {
+                  product: {
+                    include: {
+                      unitOfMeasure: true,
+                      category: true,
+                    },
+                  },
+                  shop: true,
+                  unitOfMeasure: true,
+                  batches: {
+                    include: {
+                      batch: {
+                        include: {
+                          product: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+              SellStockCorrection: {
+                select: {
+                  id: true,
+                  status: true,
+                },
+              },
+              _count: {
+                select: { items: true },
+              },
+            },
+          }),
+
+          // Get all APPROVED sales
+          prisma.sell.findMany({
+            where: {
+              saleStatus: 'APPROVED',
+              items: shopFilter,
+            },
+            orderBy: { saleDate: 'desc' },
+            include: {
+              branch: true,
+              customer: true,
+              createdBy: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                },
+              },
+              items: {
+                where: {
+                  shopId: {
+                    in: userShopIds,
+                  },
+                },
+                include: {
+                  product: {
+                    include: {
+                      unitOfMeasure: true,
+                      category: true,
+                    },
+                  },
+                  shop: true,
+                  unitOfMeasure: true,
+                  batches: {
+                    include: {
+                      batch: {
+                        include: {
+                          product: true,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+              SellStockCorrection: {
+                select: {
+                  id: true,
+                  status: true,
+                },
+              },
+              _count: {
+                select: { items: true },
+              },
+            },
+          }),
+        ]);
+
+      // Combine all results - ONLY INCLUDING: PARTIALLY_DELIVERED, APPROVED, and last 10 DELIVERED
+      const allSells = [
+        ...partiallyDeliveredSells,
+        ...approvedSells,
+        ...lastDeliveredSells, // Last 10 delivered only
+      ];
+
+      // Sort by saleDate descending
+      allSells.sort((a, b) => new Date(b.saleDate) - new Date(a.saleDate));
+
+      // Get counts for each status with shop filtering
+      const [
+        partiallyDeliveredCount,
+        approvedCount,
+        deliveredCount,
+        notApprovedCount,
+        cancelledCount,
+      ] = await Promise.all([
+        prisma.sell.count({
+          where: {
+            saleStatus: 'PARTIALLY_DELIVERED',
+            items: shopFilter,
+          },
+        }),
+        prisma.sell.count({
+          where: {
+            saleStatus: 'APPROVED',
+            items: shopFilter,
+          },
+        }),
+        prisma.sell.count({
+          where: {
+            saleStatus: 'DELIVERED',
+            items: shopFilter,
+          },
+        }),
+        prisma.sell.count({
+          where: {
+            saleStatus: 'NOT_APPROVED',
+            items: shopFilter,
+          },
+        }),
+        prisma.sell.count({
+          where: {
+            saleStatus: 'CANCELLED',
+            items: shopFilter,
+          },
+        }),
+      ]);
+
+      return {
+        sells: allSells,
+        count: allSells.length,
+        totalCount: partiallyDeliveredCount + approvedCount + deliveredCount,
+        isDefaultView: true,
+        statusCounts: {
+          PARTIALLY_DELIVERED: partiallyDeliveredCount,
+          APPROVED: approvedCount,
+          DELIVERED: deliveredCount,
+          NOT_APPROVED: notApprovedCount,
+          CANCELLED: cancelledCount,
+        },
+      };
+    } catch (error) {
+      console.error('Error in default view:', error);
+      throw error;
+    }
+  }
+
+  // REGULAR FILTERING LOGIC (when user applies any filter)
+  const whereClause = {
+    items: {
+      some: {
+        shopId: {
+          in: userShopIds,
+        },
+      },
+    },
+  };
+
+  const twelveMonthsAgo = new Date();
+  twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
+
+  // Convert string dates to Date objects if they exist
+  const startDateObj = startDate ? new Date(startDate) : undefined;
+  const endDateObj = endDate ? new Date(endDate) : undefined;
+
+  // Build the date filter
+  if (startDateObj && endDateObj) {
+    // Adjust for end date to include the entire day
+    const adjustedEndDate = new Date(endDateObj);
+    adjustedEndDate.setHours(23, 59, 59, 999);
+
+    whereClause.saleDate = {
+      gte: startDateObj,
+      lte: adjustedEndDate,
+    };
+  } else if (startDateObj) {
+    whereClause.saleDate = {
+      gte: startDateObj,
+      lte: new Date(),
+    };
+  } else if (endDateObj) {
+    // Adjust for end date to include the entire day
+    const adjustedEndDate = new Date(endDateObj);
+    adjustedEndDate.setHours(23, 59, 59, 999);
+
+    whereClause.saleDate = {
+      gte: twelveMonthsAgo,
+      lte: adjustedEndDate,
+    };
+  } else {
+    whereClause.saleDate = {
+      gte: twelveMonthsAgo,
+    };
+  }
+
+  // Filter by status if provided
+  if (status && status !== 'all') {
+    if (Array.isArray(status) && status.length > 0) {
+      whereClause.saleStatus = {
+        in: status,
+      };
+    } else if (typeof status === 'string') {
+      whereClause.saleStatus = status;
+    }
+  } else if (status === 'all') {
+    // Show all statuses including NOT_APPROVED and CANCELLED when 'all' is specified
+    // No saleStatus filter applied
+  } else {
+    // Default for filtered view: exclude NOT_APPROVED (like original)
+    whereClause.saleStatus = { not: 'NOT_APPROVED' };
+  }
+
+  try {
+    const sells = await prisma.sell.findMany({
+      where: whereClause,
+      orderBy: {
+        saleDate: 'desc',
+      },
+      include: {
+        branch: true,
+        customer: true,
+        createdBy: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        },
+        items: {
+          where: {
+            shopId: {
+              in: userShopIds,
+            },
+          },
+          include: {
+            product: {
+              include: {
+                unitOfMeasure: true,
+                category: true,
+              },
+            },
+            shop: true,
+            unitOfMeasure: true,
+            batches: {
+              include: {
+                batch: {
+                  include: {
+                    product: true,
+                  },
+                },
+              },
+            },
+          },
+        },
+        SellStockCorrection: {
+          select: {
+            id: true,
+            status: true,
+          },
+        },
+        _count: {
+          select: { items: true },
+        },
+      },
+    });
+
+    // Apply case-insensitive filtering in memory if needed
+    let filteredSells = sells;
+
+    if (customerName && customerName.trim()) {
+      const customerNameLower = customerName.trim().toLowerCase();
+      filteredSells = filteredSells.filter(
+        (sell) =>
+          sell.customer &&
+          sell.customer.name.toLowerCase().includes(customerNameLower),
+      );
+    }
+
+    if (salesPersonName && salesPersonName.trim()) {
+      const salesPersonNameLower = salesPersonName.trim().toLowerCase();
+      filteredSells = filteredSells.filter(
+        (sell) =>
+          sell.createdBy &&
+          sell.createdBy.name.toLowerCase().includes(salesPersonNameLower),
+      );
+    }
+
+    return {
+      sells: filteredSells,
+      count: filteredSells.length,
+      totalCount: await prisma.sell.count({ where: whereClause }),
+      isDefaultView: false,
+    };
+  } catch (error) {
+    console.error('Error fetching sells:', error);
+    throw error;
+  }
+};
+
+const getAllSellsForStoreweb = async ({
   startDate,
   endDate,
   userId,
@@ -2307,6 +3283,8 @@ module.exports = {
   cancelSale,
   partialSaleDelivery,
   getAllSellsuser,
+  getAllSellsuserweb,
   getAllSellsForStore,
+  getAllSellsForStoreweb,
   getSellByIdByuser,
 };

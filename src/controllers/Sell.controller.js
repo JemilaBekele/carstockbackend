@@ -63,7 +63,7 @@ const getSells = catchAsync(async (req, res) => {
   });
 });
 const getAllSellsuser = catchAsync(async (req, res) => {
-  const userId = req.user.id; // ✅ User ID from auth middleware
+  const userId = req.user.id; // ✅ User ID from auth middleware getAllSellsuserweb
   const { startDate, endDate, customerName, status } = req.query;
   const result = await sellService.getAllSellsuser({
     startDate,
@@ -72,6 +72,56 @@ const getAllSellsuser = catchAsync(async (req, res) => {
     customerName,
     status,
   });
+  res.status(httpStatus.OK).send({
+    success: true,
+    ...result,
+  });
+});
+const getAllSellsuserweb = catchAsync(async (req, res) => {
+  const userId = req.user.id; // ✅ User ID from auth middleware getAllSellsuserweb
+  const { startDate, endDate, customerName, status } = req.query;
+  const result = await sellService.getAllSellsuserweb({
+    startDate,
+    endDate,
+    userId,
+    customerName,
+    status,
+  });
+  res.status(httpStatus.OK).send({
+    success: true,
+    ...result,
+  });
+});
+const getAllSellsForStoreweb = catchAsync(async (req, res) => {
+  const userId = req.user.id;
+  const { startDate, endDate, customerName, salesPersonName } = req.query;
+
+  // Handle status parameter which can be single value or array
+  let statusFilter;
+  if (req.query.status) {
+    if (Array.isArray(req.query.status)) {
+      // If multiple status parameters are provided (e.g., ?status=APPROVED&status=PENDING)
+      statusFilter = req.query.status;
+    } else if (req.query.status === 'all') {
+      statusFilter = 'all';
+    } else if (req.query.status.includes(',')) {
+      // If comma-separated values
+      statusFilter = req.query.status.split(',').map((s) => s.trim());
+    } else {
+      // Single value
+      statusFilter = req.query.status;
+    }
+  }
+
+  const result = await sellService.getAllSellsForStoreweb({
+    startDate,
+    endDate,
+    userId,
+    customerName: customerName?.trim(),
+    salesPersonName: salesPersonName?.trim(),
+    status: statusFilter,
+  });
+
   res.status(httpStatus.OK).send({
     success: true,
     ...result,
@@ -305,7 +355,9 @@ module.exports = {
   deliverAllSaleItems,
   partialSaleDelivery,
   getAllSellsuser,
+  getAllSellsuserweb,
   getAllSellsForStore,
+  getAllSellsForStoreweb,
   getSellByIdByuser,
   unlockSell,
 };
