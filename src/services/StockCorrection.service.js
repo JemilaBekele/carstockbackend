@@ -112,149 +112,116 @@ const getAllStockCorrections = async ({ startDate, endDate } = {}) => {
   };
 };
 const generateShortCode = async () => {
-  try {
-    console.log('=== DEBUG: generateShortCode START ===');
-    console.log('Checking if prisma is defined:', typeof prisma);
-    console.log('Prisma client available:', !!prisma?.stockCorrection);
-
-    // Test a simple query first
-    const test = await prisma.$queryRaw`SELECT 1 as test`;
-    console.log('Can connect to DB:', test);
-
-    const count = await prisma.stockCorrection.count();
-    console.log('Count result:', count);
-    console.log('Count type:', typeof count);
-
-    const code = `SC-${String(count + 1).padStart(6, '0')}`;
-    console.log('Generated code:', code);
-    console.log('=== DEBUG: generateShortCode END ===');
-
-    return code;
-  } catch (error) {
-    console.error('=== ERROR in generateShortCode ===');
-    console.error('Error message:', error.message);
-    console.error('Error code:', error.code);
-    console.error('Error meta:', error.meta);
-    console.error('Full error:', error);
-
-    // Try an alternative approach
-    console.log('Trying alternative approach...');
-
-    // Option 1: Use raw query if count fails
-    try {
-      const result = await prisma.$queryRaw`
-        SELECT COUNT(*) as count FROM "StockCorrection"
-      `;
-      const count = Number(result[0]?.count || 0);
-      console.log('Alternative count:', count);
-      return `SC-${String(count + 1).padStart(6, '0')}`;
-    } catch (rawError) {
-      console.error('Raw query also failed:', rawError);
-
-      // Option 2: Use timestamp-based code
-      const timestamp = Date.now();
-      return `SC-${timestamp.toString().slice(-6)}`;
-    }
-  }
+  const count = await prisma.stockCorrection.count();
+  return `SC-${String(count + 1).padStart(6, '0')}`;
 };
-
-// Also add debugging to the create function
+// Create StockCorrection
 const createStockCorrection = async (stockCorrectionBody, userId) => {
-  console.log('=== DEBUG: createStockCorrection START ===');
-  console.log('Request body:', JSON.stringify(stockCorrectionBody, null, 2));
-  console.log('User ID:', userId);
+  try {
+    console.log('=== DEBUG: createStockCorrection START ===');
+    console.log('Request body:', JSON.stringify(stockCorrectionBody, null, 2));
+    console.log('User ID:', userId);
 
-  const shortCode = await generateShortCode();
-  console.log('Generated short code:', shortCode);
-  // if (
-  //   stockCorrectionBody.reference &&
-  //   (await getStockCorrectionByReference(stockCorrectionBody.reference))
-  // ) {
-  //   throw new ApiError(
-  //     httpStatus.BAD_REQUEST,
-  //     'Stock correction reference already taken',
-  //   );
-  // }
+    const shortCode = await generateShortCode();
+    console.log('Generated short code:', shortCode);
 
-  // Parse items if it's a string
-  const { items: itemsString, ...restStockCorrectionBody } =
-    stockCorrectionBody;
-  const items =
-    typeof itemsString === 'string' ? JSON.parse(itemsString) : itemsString;
-
-  // Validate items
-  if (!items || !Array.isArray(items) || items.length === 0) {
-    throw new ApiError(
-      httpStatus.BAD_REQUEST,
-      'Stock correction must have at least one item',
+    // Parse items if it's a string
+    const { items: itemsString, ...restStockCorrectionBody } =
+      stockCorrectionBody;
+    console.log('After destructuring - itemsString:', itemsString);
+    console.log(
+      'After destructuring - restStockCorrectionBody:',
+      restStockCorrectionBody,
     );
-  }
 
-  // Validate individual item properties
-  items.forEach((item, index) => {
-    if (!item.productId || !item.unitOfMeasureId) {
+    const items =
+      typeof itemsString === 'string' ? JSON.parse(itemsString) : itemsString;
+    console.log('Parsed items:', JSON.stringify(items, null, 2));
+
+    // Validate items
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      console.log('Items validation failed');
       throw new ApiError(
         httpStatus.BAD_REQUEST,
-        `Item ${
-          index + 1
-        } is missing required fields (productId or unitOfMeasureId)`,
+        'Stock correction must have at least one item',
       );
     }
+
+    console.log('Items validation passed');
+
+    // Validate individual item properties
+    items.forEach((item, index) => {
+      console.log(`Validating item ${index}:`, item);
+      if (!item.productId || !item.unitOfMeasureId) {
+        throw new ApiError(
+          httpStatus.BAD_REQUEST,
+          `Item ${
+            index + 1
+          } is missing required fields (productId or unitOfMeasureId)`,
+        );
+      }
+      if (
+        item.quantity === undefined ||
+        item.quantity === null ||
+        Number.isNaN(item.quantity)
+      ) {
+        throw new ApiError(
+          httpStatus.BAD_REQUEST,
+          `Item ${index + 1} has invalid quantity`,
+        );
+      }
+      if (item.quantity === 0) {
+        throw new ApiError(
+          httpStatus.BAD_REQUEST,
+          `Item ${index + 1} quantity cannot be zero`,
+        );
+      }
+    });
+
+    console.log('All items validated successfully');
+
+    // Clean up empty string values
+    const cleanedStockCorrectionBody = {
+      ...restStockCorrectionBody,
+      storeId:
+        restStockCorrectionBody.storeId === ''
+          ? null
+          : restStockCorrectionBody.storeId,
+      shopId:
+        restStockCorrectionBody.shopId === ''
+          ? null
+          : restStockCorrectionBody.shopId,
+      purchaseId:
+        restStockCorrectionBody.purchaseId === ''
+          ? null
+          : restStockCorrectionBody.purchaseId,
+      transferId:
+        restStockCorrectionBody.transferId === ''
+          ? null
+          : restStockCorrectionBody.transferId,
+    };
+
+    console.log('Cleaned body:', cleanedStockCorrectionBody);
+
+    // Validate location
     if (
-      item.quantity === undefined ||
-      item.quantity === null ||
-      Number.isNaN(item.quantity)
+      !cleanedStockCorrectionBody.storeId &&
+      !cleanedStockCorrectionBody.shopId
     ) {
+      console.log('Location validation failed');
       throw new ApiError(
         httpStatus.BAD_REQUEST,
-        `Item ${index + 1} has invalid quantity`,
+        'Either store or shop must be specified',
       );
     }
-    if (item.quantity === 0) {
-      throw new ApiError(
-        httpStatus.BAD_REQUEST,
-        `Item ${index + 1} quantity cannot be zero`,
-      );
-    }
-  });
 
-  // Clean up empty string values
-  const cleanedStockCorrectionBody = {
-    ...restStockCorrectionBody,
-    storeId:
-      restStockCorrectionBody.storeId === ''
-        ? null
-        : restStockCorrectionBody.storeId,
-    shopId:
-      restStockCorrectionBody.shopId === ''
-        ? null
-        : restStockCorrectionBody.shopId,
-    purchaseId:
-      restStockCorrectionBody.purchaseId === ''
-        ? null
-        : restStockCorrectionBody.purchaseId,
-    transferId:
-      restStockCorrectionBody.transferId === ''
-        ? null
-        : restStockCorrectionBody.transferId,
-  };
+    console.log('Location validation passed');
 
-  // Validate location
-  if (
-    !cleanedStockCorrectionBody.storeId &&
-    !cleanedStockCorrectionBody.shopId
-  ) {
-    throw new ApiError(
-      httpStatus.BAD_REQUEST,
-      'Either store or shop must be specified',
-    );
-  }
-
-  // Create the stock correction
-  const stockCorrection = await prisma.stockCorrection.create({
-    data: {
+    // Create the stock correction
+    console.log('Attempting to create stock correction in database...');
+    console.log('Data to create:', {
       ...cleanedStockCorrectionBody,
-      shortCode, // Add this field
+      shortCode,
       createdById: userId,
       updatedById: userId,
       items: {
@@ -265,19 +232,55 @@ const createStockCorrection = async (stockCorrectionBody, userId) => {
           quantity: item.quantity,
         })),
       },
-    },
-    include: {
-      items: {
-        include: {
-          unitOfMeasure: true,
-          product: true,
-          batch: true,
+    });
+
+    const stockCorrection = await prisma.stockCorrection.create({
+      data: {
+        ...cleanedStockCorrectionBody,
+        shortCode, // Add this field
+        createdById: userId,
+        updatedById: userId,
+        items: {
+          create: items.map((item) => ({
+            productId: item.productId,
+            batchId: item.batchId || null,
+            unitOfMeasureId: item.unitOfMeasureId,
+            quantity: item.quantity,
+          })),
         },
       },
-    },
-  });
+      include: {
+        items: {
+          include: {
+            unitOfMeasure: true,
+            product: true,
+            batch: true,
+          },
+        },
+      },
+    });
 
-  return stockCorrection;
+    console.log('Stock correction created successfully:', stockCorrection.id);
+    console.log('=== DEBUG: createStockCorrection END ===');
+
+    return stockCorrection;
+  } catch (error) {
+    console.error('=== ERROR in createStockCorrection ===');
+    console.error('Error name:', error.name);
+    console.error('Error message:', error.message);
+    console.error('Error code:', error.code);
+    console.error('Error meta:', error.meta);
+    console.error('Full error:', error);
+    console.error('Stack trace:', error.stack);
+
+    // Check if it's a Prisma error
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      console.error('Prisma error code:', error.code);
+      console.error('Prisma error meta:', error.meta);
+    }
+
+    throw error;
+  }
 };
 
 // Update StockCorrection
