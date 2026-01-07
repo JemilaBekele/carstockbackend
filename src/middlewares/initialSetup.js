@@ -99,8 +99,8 @@ class SystemInitializer {
           adminUser = await userService.createUser(adminData);
           logger.info('Admin user created successfully');
         } else {
-          User exists, check role
-          eslint-disable-next-line no-lonely-if
+          // User exists, check role
+          // eslint-disable-next-line no-lonely-if
           if (adminUser.roleId !== adminRole.id || adminUser.admin !== true) {
             adminUser = await userService.updateUserById(adminUser.id, {
               roleId: adminRole.id,
