@@ -82,7 +82,7 @@ class SystemInitializer {
     try {
       const adminData = {
         name: 'System Admin',
-        email: process.env.ADMIN_EMAIL || 'admbn@example.com',
+        email: process.env.ADMIN_EMAIL || 'admjemilaibbn@example.com',
         password: process.env.ADMIN_PASSWORD || 'Admin@1234',
         roleId: adminRole.id,
         status: 'Active',
@@ -101,15 +101,15 @@ class SystemInitializer {
         } else {
           // User exists, check role
           // eslint-disable-next-line no-lonely-if
-          if (adminUser.roleId !== adminRole.id || adminUser.admin !== true) {
-            adminUser = await userService.updateUserById(adminUser.id, {
-              roleId: adminRole.id,
-              admin: true,
-            });
-            logger.info('Existing admin user role updated');
-          } else {
-            logger.info('Admin user already exists with correct role');
-          }
+          // if (adminUser.roleId !== adminRole.id || adminUser.admin !== true) {
+          //   adminUser = await userService.updateUserById(adminUser.id, {
+          //     roleId: adminRole.id,
+          //     admin: true,
+          //   });
+          //   logger.info('Existing admin user role updated');
+          // } else {
+          //   logger.info('Admin user already exists with correct role');
+          // }
         }
       } catch (error) {
         logger.error('Error in admin user setup:', error);
