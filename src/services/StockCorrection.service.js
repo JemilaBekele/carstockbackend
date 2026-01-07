@@ -125,7 +125,6 @@ const generateShortCode = async () => {
 
     return `SC-${String(nextNumber).padStart(6, '0')}`;
   } catch (error) {
-    console.error('Error generating short code:', error);
     // Fallback: Use timestamp
     const timestamp = Date.now();
     return `SC-EMG-${timestamp.toString().slice(-8)}`;
@@ -133,111 +132,98 @@ const generateShortCode = async () => {
 };
 // Create StockCorrection
 const createStockCorrection = async (stockCorrectionBody, userId) => {
-  try {
-    console.log('=== DEBUG: createStockCorrection START ===');
-    console.log('Request body:', JSON.stringify(stockCorrectionBody, null, 2));
-    console.log('User ID:', userId);
+  // Check if reference already exists
+  const shortCode = await generateShortCode();
 
-    const shortCode = await generateShortCode();
-    console.log('Generated short code:', shortCode);
+  // if (
+  //   stockCorrectionBody.reference &&
+  //   (await getStockCorrectionByReference(stockCorrectionBody.reference))
+  // ) {
+  //   throw new ApiError(
+  //     httpStatus.BAD_REQUEST,
+  //     'Stock correction reference already taken',
+  //   );
+  // }
 
-    // Parse items if it's a string
-    const { items: itemsString, ...restStockCorrectionBody } =
-      stockCorrectionBody;
-    console.log('After destructuring - itemsString:', itemsString);
-    console.log(
-      'After destructuring - restStockCorrectionBody:',
-      restStockCorrectionBody,
+  // Parse items if it's a string
+  const { items: itemsString, ...restStockCorrectionBody } =
+    stockCorrectionBody;
+  const items =
+    typeof itemsString === 'string' ? JSON.parse(itemsString) : itemsString;
+
+  // Validate items
+  if (!items || !Array.isArray(items) || items.length === 0) {
+    throw new ApiError(
+      httpStatus.BAD_REQUEST,
+      'Stock correction must have at least one item',
     );
+  }
 
-    const items =
-      typeof itemsString === 'string' ? JSON.parse(itemsString) : itemsString;
-    console.log('Parsed items:', JSON.stringify(items, null, 2));
-
-    // Validate items
-    if (!items || !Array.isArray(items) || items.length === 0) {
-      console.log('Items validation failed');
+  // Validate individual item properties
+  items.forEach((item, index) => {
+    if (!item.productId || !item.unitOfMeasureId) {
       throw new ApiError(
         httpStatus.BAD_REQUEST,
-        'Stock correction must have at least one item',
+        `Item ${
+          index + 1
+        } is missing required fields (productId or unitOfMeasureId)`,
       );
     }
-
-    console.log('Items validation passed');
-
-    // Validate individual item properties
-    items.forEach((item, index) => {
-      console.log(`Validating item ${index}:`, item);
-      if (!item.productId || !item.unitOfMeasureId) {
-        throw new ApiError(
-          httpStatus.BAD_REQUEST,
-          `Item ${
-            index + 1
-          } is missing required fields (productId or unitOfMeasureId)`,
-        );
-      }
-      if (
-        item.quantity === undefined ||
-        item.quantity === null ||
-        Number.isNaN(item.quantity)
-      ) {
-        throw new ApiError(
-          httpStatus.BAD_REQUEST,
-          `Item ${index + 1} has invalid quantity`,
-        );
-      }
-      if (item.quantity === 0) {
-        throw new ApiError(
-          httpStatus.BAD_REQUEST,
-          `Item ${index + 1} quantity cannot be zero`,
-        );
-      }
-    });
-
-    console.log('All items validated successfully');
-
-    // Clean up empty string values
-    const cleanedStockCorrectionBody = {
-      ...restStockCorrectionBody,
-      storeId:
-        restStockCorrectionBody.storeId === ''
-          ? null
-          : restStockCorrectionBody.storeId,
-      shopId:
-        restStockCorrectionBody.shopId === ''
-          ? null
-          : restStockCorrectionBody.shopId,
-      purchaseId:
-        restStockCorrectionBody.purchaseId === ''
-          ? null
-          : restStockCorrectionBody.purchaseId,
-      transferId:
-        restStockCorrectionBody.transferId === ''
-          ? null
-          : restStockCorrectionBody.transferId,
-    };
-
-    console.log('Cleaned body:', cleanedStockCorrectionBody);
-
-    // Validate location
     if (
-      !cleanedStockCorrectionBody.storeId &&
-      !cleanedStockCorrectionBody.shopId
+      item.quantity === undefined ||
+      item.quantity === null ||
+      Number.isNaN(item.quantity)
     ) {
-      console.log('Location validation failed');
       throw new ApiError(
         httpStatus.BAD_REQUEST,
-        'Either store or shop must be specified',
+        `Item ${index + 1} has invalid quantity`,
       );
     }
+    if (item.quantity === 0) {
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        `Item ${index + 1} quantity cannot be zero`,
+      );
+    }
+  });
 
-    console.log('Location validation passed');
+  // Clean up empty string values
+  const cleanedStockCorrectionBody = {
+    ...restStockCorrectionBody,
+    storeId:
+      restStockCorrectionBody.storeId === ''
+        ? null
+        : restStockCorrectionBody.storeId,
+    shopId:
+      restStockCorrectionBody.shopId === ''
+        ? null
+        : restStockCorrectionBody.shopId,
+    purchaseId:
+      restStockCorrectionBody.purchaseId === ''
+        ? null
+        : restStockCorrectionBody.purchaseId,
+    transferId:
+      restStockCorrectionBody.transferId === ''
+        ? null
+        : restStockCorrectionBody.transferId,
+  };
 
-    // Create the stock correction
-    console.log('Attempting to create stock correction in database...');
-    console.log('Data to create:', {
+  // Validate location
+  if (
+    !cleanedStockCorrectionBody.storeId &&
+    !cleanedStockCorrectionBody.shopId
+  ) {
+    throw new ApiError(
+      httpStatus.BAD_REQUEST,
+      'Either store or shop must be specified',
+    );
+  }
+
+  // Create the stock correction
+  const stockCorrection = await prisma.stockCorrection.create({
+    data: {
       ...cleanedStockCorrectionBody,
-      shortCode,
+      shortCode, // Add this field
       createdById: userId,
       updatedById: userId,
       items: {
@@ -248,55 +234,19 @@ const createStockCorrection = async (stockCorrectionBody, userId) => {
           quantity: item.quantity,
         })),
       },
-    });
-
-    const stockCorrection = await prisma.stockCorrection.create({
-      data: {
-        ...cleanedStockCorrectionBody,
-        shortCode, // Add this field
-        createdById: userId,
-        updatedById: userId,
-        items: {
-          create: items.map((item) => ({
-            productId: item.productId,
-            batchId: item.batchId || null,
-            unitOfMeasureId: item.unitOfMeasureId,
-            quantity: item.quantity,
-          })),
+    },
+    include: {
+      items: {
+        include: {
+          unitOfMeasure: true,
+          product: true,
+          batch: true,
         },
       },
-      include: {
-        items: {
-          include: {
-            unitOfMeasure: true,
-            product: true,
-            batch: true,
-          },
-        },
-      },
-    });
+    },
+  });
 
-    console.log('Stock correction created successfully:', stockCorrection.id);
-    console.log('=== DEBUG: createStockCorrection END ===');
-
-    return stockCorrection;
-  } catch (error) {
-    console.error('=== ERROR in createStockCorrection ===');
-    console.error('Error name:', error.name);
-    console.error('Error message:', error.message);
-    console.error('Error code:', error.code);
-    console.error('Error meta:', error.meta);
-    console.error('Full error:', error);
-    console.error('Stack trace:', error.stack);
-
-    // Check if it's a Prisma error
-    if (error instanceof Prisma.PrismaClientKnownRequestError) {
-      console.error('Prisma error code:', error.code);
-      console.error('Prisma error meta:', error.meta);
-    }
-
-    throw error;
-  }
+  return stockCorrection;
 };
 
 // Update StockCorrection
@@ -638,10 +588,7 @@ const deleteStockCorrection = async (id, userId) => {
 
 // Approve StockCorrection
 const approveStockCorrection = async (stockCorrectionId, userId) => {
-  console.log('Starting approveStockCorrection:', {
-    stockCorrectionId,
-    userId,
-  });
+  console.log('Starting approveStockCorrection:', { stockCorrectionId, userId });
 
   const stockCorrection = await getStockCorrectionById(stockCorrectionId);
   console.log('Retrieved stock correction:', {
@@ -649,7 +596,7 @@ const approveStockCorrection = async (stockCorrectionId, userId) => {
     status: stockCorrection?.status,
     storeId: stockCorrection?.storeId,
     shopId: stockCorrection?.shopId,
-    itemsCount: stockCorrection?.items?.length,
+    itemsCount: stockCorrection?.items?.length
   });
 
   if (!stockCorrection) {
@@ -658,10 +605,7 @@ const approveStockCorrection = async (stockCorrectionId, userId) => {
   }
 
   if (stockCorrection.status !== 'PENDING') {
-    console.error(
-      'Stock correction already processed:',
-      stockCorrection.status,
-    );
+    console.error('Stock correction already processed:', stockCorrection.status);
     throw new ApiError(
       httpStatus.BAD_REQUEST,
       `Stock correction is already ${stockCorrection.status.toLowerCase()}`,
@@ -670,7 +614,7 @@ const approveStockCorrection = async (stockCorrectionId, userId) => {
 
   const result = await prisma.$transaction(async (tx) => {
     console.log('Transaction started');
-
+    
     // Get all unit of measures for the stock correction items
     const unitOfMeasureIds = stockCorrection.items.map(
       (item) => item.unitOfMeasureId,
@@ -686,14 +630,11 @@ const approveStockCorrection = async (stockCorrectionId, userId) => {
       acc[uom.id] = uom;
       return acc;
     }, {});
-    console.log(
-      'Unit of measure map created:',
-      Object.keys(unitOfMeasureMap).length,
-    );
+    console.log('Unit of measure map created:', Object.keys(unitOfMeasureMap).length);
 
     // Check for negative stock BEFORE processing
     const insufficientStockItems = [];
-
+    
     console.log('Starting stock availability check...');
     // For each item, check if there's enough stock for subtractions
     for (const item of stockCorrection.items) {
@@ -701,25 +642,19 @@ const approveStockCorrection = async (stockCorrectionId, userId) => {
         itemId: item.id,
         productId: item.productId,
         batchId: item.batchId,
-        quantity: item.quantity,
+        quantity: item.quantity
       });
-
+      
       const quantityToUse = item.quantity;
-
+      
       // Only need to check for negative quantities (subtractions)
       if (quantityToUse < 0) {
         const absoluteQuantity = Math.abs(quantityToUse);
-        console.log(
-          'Item requires subtraction, checking stock availability. Required:',
-          absoluteQuantity,
-        );
-
+        console.log('Item requires subtraction, checking stock availability. Required:', absoluteQuantity);
+        
         if (stockCorrection.storeId) {
-          console.log(
-            'Checking store stock for store:',
-            stockCorrection.storeId,
-          );
-
+          console.log('Checking store stock for store:', stockCorrection.storeId);
+          
           // CORRECTED: StoreStock doesn't have productId, we need to get it through the batch
           const storeStock = await tx.storeStock.findFirst({
             where: {
@@ -727,29 +662,24 @@ const approveStockCorrection = async (stockCorrectionId, userId) => {
               batchId: item.batchId || 'no-batch',
             },
             include: {
-              batch: true, // Include batch to check productId
-            },
+              batch: true  // Include batch to check productId
+            }
           });
-
+          
           console.log('Store stock query result:', storeStock);
-
+          
           // Verify if this is the correct product
           if (storeStock && storeStock.batch.productId !== item.productId) {
             console.warn('Product ID mismatch:', {
               expected: item.productId,
-              actual: storeStock.batch.productId,
+              actual: storeStock.batch.productId
             });
             // Still use this stock as it's for the same batch
           }
-
+          
           const currentStock = storeStock?.quantity || 0;
-          console.log(
-            'Current stock:',
-            currentStock,
-            'Required:',
-            absoluteQuantity,
-          );
-
+          console.log('Current stock:', currentStock, 'Required:', absoluteQuantity);
+          
           if (currentStock < absoluteQuantity) {
             console.error('Insufficient store stock!');
             insufficientStockItems.push({
@@ -758,12 +688,13 @@ const approveStockCorrection = async (stockCorrectionId, userId) => {
               required: absoluteQuantity,
               available: currentStock,
               location: 'store',
-              locationId: stockCorrection.storeId,
+              locationId: stockCorrection.storeId
             });
           }
+          
         } else if (stockCorrection.shopId) {
           console.log('Checking shop stock for shop:', stockCorrection.shopId);
-
+          
           // CORRECTED: ShopStock doesn't have productId, we need to get it through the batch
           const shopStock = await tx.shopStock.findFirst({
             where: {
@@ -771,29 +702,24 @@ const approveStockCorrection = async (stockCorrectionId, userId) => {
               batchId: item.batchId || 'no-batch',
             },
             include: {
-              batch: true, // Include batch to check productId
-            },
+              batch: true  // Include batch to check productId
+            }
           });
-
+          
           console.log('Shop stock query result:', shopStock);
-
+          
           // Verify if this is the correct product
           if (shopStock && shopStock.batch.productId !== item.productId) {
             console.warn('Product ID mismatch:', {
               expected: item.productId,
-              actual: shopStock.batch.productId,
+              actual: shopStock.batch.productId
             });
             // Still use this stock as it's for the same batch
           }
-
+          
           const currentStock = shopStock?.quantity || 0;
-          console.log(
-            'Current stock:',
-            currentStock,
-            'Required:',
-            absoluteQuantity,
-          );
-
+          console.log('Current stock:', currentStock, 'Required:', absoluteQuantity);
+          
           if (currentStock < absoluteQuantity) {
             console.error('Insufficient shop stock!');
             insufficientStockItems.push({
@@ -802,7 +728,7 @@ const approveStockCorrection = async (stockCorrectionId, userId) => {
               required: absoluteQuantity,
               available: currentStock,
               location: 'shop',
-              locationId: stockCorrection.shopId,
+              locationId: stockCorrection.shopId
             });
           }
         }
@@ -814,40 +740,30 @@ const approveStockCorrection = async (stockCorrectionId, userId) => {
     // If there are insufficient stock items, throw an error
     if (insufficientStockItems.length > 0) {
       console.error('Insufficient stock items found:', insufficientStockItems);
-      const errorDetails = insufficientStockItems
-        .map(
-          (item) =>
-            `Product ${item.productId} (Batch: ${
-              item.batchId || 'N/A'
-            }): Required ${item.required}, Available ${item.available}`,
-        )
-        .join('; ');
-
+      const errorDetails = insufficientStockItems.map(item => 
+        `Product ${item.productId} (Batch: ${item.batchId || 'N/A'}): Required ${item.required}, Available ${item.available}`
+      ).join('; ');
+      
       throw new ApiError(
         httpStatus.BAD_REQUEST,
-        `Insufficient stock for subtraction: ${errorDetails}`,
+        `Insufficient stock for subtraction: ${errorDetails}`
       );
     }
 
-    console.log(
-      'Stock availability check passed, proceeding with operations...',
-    );
+    console.log('Stock availability check passed, proceeding with operations...');
 
     // Prepare all operations for each stock correction item
     const operations = stockCorrection.items.map((item, index) => {
       console.log(`Preparing operations for item ${index + 1}:`, {
         productId: item.productId,
         batchId: item.batchId,
-        quantity: item.quantity,
+        quantity: item.quantity
       });
 
       const unitOfMeasure = unitOfMeasureMap[item.unitOfMeasureId];
 
       if (!unitOfMeasure) {
-        console.error(
-          `Unit of measure not found for item ${item.id}:`,
-          item.unitOfMeasureId,
-        );
+        console.error(`Unit of measure not found for item ${item.id}:`, item.unitOfMeasureId);
         throw new ApiError(
           httpStatus.BAD_REQUEST,
           `Unit of measure not found for item ${item.id}`,
@@ -866,16 +782,14 @@ const approveStockCorrection = async (stockCorrectionId, userId) => {
         isAddition,
         movementType,
         absoluteQuantity,
-        notes,
+        notes
       });
 
       const itemOperations = [];
 
       // Update stock based on location (store or shop)
       if (stockCorrection.storeId) {
-        console.log(
-          `Creating store stock operation for store: ${stockCorrection.storeId}`,
-        );
+        console.log(`Creating store stock operation for store: ${stockCorrection.storeId}`);
         itemOperations.push(
           tx.storeStock.upsert({
             where: {
@@ -899,9 +813,7 @@ const approveStockCorrection = async (stockCorrectionId, userId) => {
           }),
         );
       } else if (stockCorrection.shopId) {
-        console.log(
-          `Creating shop stock operation for shop: ${stockCorrection.shopId}`,
-        );
+        console.log(`Creating shop stock operation for shop: ${stockCorrection.shopId}`);
         itemOperations.push(
           tx.shopStock.upsert({
             where: {
@@ -928,9 +840,7 @@ const approveStockCorrection = async (stockCorrectionId, userId) => {
 
       // Create stock ledger entry
       if (stockCorrection.storeId) {
-        console.log(
-          `Creating stock ledger for store: ${stockCorrection.storeId}`,
-        );
+        console.log(`Creating stock ledger for store: ${stockCorrection.storeId}`);
         itemOperations.push(
           tx.stockLedger.create({
             data: {
@@ -950,9 +860,7 @@ const approveStockCorrection = async (stockCorrectionId, userId) => {
           }),
         );
       } else if (stockCorrection.shopId) {
-        console.log(
-          `Creating stock ledger for shop: ${stockCorrection.shopId}`,
-        );
+        console.log(`Creating stock ledger for shop: ${stockCorrection.shopId}`);
         itemOperations.push(
           tx.stockLedger.create({
             data: {
@@ -973,10 +881,7 @@ const approveStockCorrection = async (stockCorrectionId, userId) => {
         );
       }
 
-      console.log(
-        `Item ${index + 1} operations prepared:`,
-        itemOperations.length,
-      );
+      console.log(`Item ${index + 1} operations prepared:`, itemOperations.length);
       return itemOperations;
     });
 
@@ -986,10 +891,7 @@ const approveStockCorrection = async (stockCorrectionId, userId) => {
 
     try {
       const operationResults = await Promise.all(allOperations);
-      console.log(
-        'All operations completed successfully:',
-        operationResults.length,
-      );
+      console.log('All operations completed successfully:', operationResults.length);
     } catch (error) {
       console.error('Error executing operations:', error);
       throw error;
