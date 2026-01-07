@@ -112,8 +112,24 @@ const getAllStockCorrections = async ({ startDate, endDate } = {}) => {
   };
 };
 const generateShortCode = async () => {
-  const count = await prisma.stockCorrection.count();
-  return `SC-${String(count + 1).padStart(6, '0')}`;
+  try {
+    // Find the highest existing SC number
+    const result = await prisma.$queryRaw`
+      SELECT MAX(CAST(SUBSTRING("shortCode" FROM 4) AS INTEGER)) as maxNumber
+      FROM "StockCorrection"
+      WHERE "shortCode" LIKE 'SC-%'
+    `;
+
+    const maxNumber = result[0]?.maxNumber || 0;
+    const nextNumber = maxNumber + 1;
+
+    return `SC-${String(nextNumber).padStart(6, '0')}`;
+  } catch (error) {
+    console.error('Error generating short code:', error);
+    // Fallback: Use timestamp
+    const timestamp = Date.now();
+    return `SC-EMG-${timestamp.toString().slice(-8)}`;
+  }
 };
 // Create StockCorrection
 const createStockCorrection = async (stockCorrectionBody, userId) => {
