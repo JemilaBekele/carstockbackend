@@ -608,12 +608,12 @@ model StockCorrection {
   storeId String? @db.Char(36)
   store   Store?  @relation(fields: [storeId], references: [id])
 
-  shopId String? @db.Char(36)
-  shop   Shop?   @relation(fields: [shopId], references: [id])
-
+  shopId    String?               @db.Char(36)
+  shop      Shop?                 @relation(fields: [shopId], references: [id])
+  isChecked Boolean               @default(false)
   // correction details
-  reason StockCorrectionReason
-  status StockCorrectionStatus @default(PENDING)
+  reason    StockCorrectionReason
+  status    StockCorrectionStatus @default(PENDING)
 
   // optional linkage to original source document
   purchaseId String?   @db.Char(36)
@@ -858,12 +858,14 @@ enum SellStockCorrectionStatus {
 enum ItemSaleStatus {
   PENDING
   DELIVERED
+  REJECTED
 }
 
 model SellStockCorrection {
-  id     String  @id @default(uuid()) @map("_id") @db.Char(36)
-  sellId String? @db.Char(36)
-  sell   Sell?   @relation(fields: [sellId], references: [id])
+  id        String   @id @default(uuid()) @map("_id") @db.Char(36)
+  sellId    String?  @db.Char(36)
+  sell      Sell?    @relation(fields: [sellId], references: [id])
+  isChecked Boolean? @default(false) // Make sure this field exists
 
   status SellStockCorrectionStatus @default(PENDING)
 
@@ -961,6 +963,7 @@ enum DocumentType {
 enum NotificationType {
   SELL_READY_FOR_DELIVERY
   SELL_CANCELLED
+  Done
 
   Payment
   Inventory

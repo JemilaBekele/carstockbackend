@@ -249,7 +249,7 @@ const getAllSells = async ({
       },
     },
   });
-
+console.log("Sells fetched:", sells.length);
   return {
     sells,
     count: sells.length,

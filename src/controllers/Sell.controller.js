@@ -50,6 +50,7 @@ const unlockSell = catchAsync(async (req, res) => {
 
 // Get all Sells
 const getSells = catchAsync(async (req, res) => {
+  console.log("Getting all sells with query:", req.query);  
   const { startDate, endDate } = req.query;
 
   const result = await sellService.getAllSells({

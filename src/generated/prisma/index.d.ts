@@ -315,7 +315,8 @@ export type SellStockCorrectionStatus = (typeof SellStockCorrectionStatus)[keyof
 
 export const ItemSaleStatus: {
   PENDING: 'PENDING',
-  DELIVERED: 'DELIVERED'
+  DELIVERED: 'DELIVERED',
+  REJECTED: 'REJECTED'
 };
 
 export type ItemSaleStatus = (typeof ItemSaleStatus)[keyof typeof ItemSaleStatus]
@@ -339,6 +340,7 @@ export type DocumentType = (typeof DocumentType)[keyof typeof DocumentType]
 export const NotificationType: {
   SELL_READY_FOR_DELIVERY: 'SELL_READY_FOR_DELIVERY',
   SELL_CANCELLED: 'SELL_CANCELLED',
+  Done: 'Done',
   Payment: 'Payment',
   Inventory: 'Inventory',
   System: 'System',
@@ -31765,6 +31767,7 @@ export namespace Prisma {
     shortCode: string | null
     storeId: string | null
     shopId: string | null
+    isChecked: boolean | null
     reason: $Enums.StockCorrectionReason | null
     status: $Enums.StockCorrectionStatus | null
     purchaseId: string | null
@@ -31782,6 +31785,7 @@ export namespace Prisma {
     shortCode: string | null
     storeId: string | null
     shopId: string | null
+    isChecked: boolean | null
     reason: $Enums.StockCorrectionReason | null
     status: $Enums.StockCorrectionStatus | null
     purchaseId: string | null
@@ -31799,6 +31803,7 @@ export namespace Prisma {
     shortCode: number
     storeId: number
     shopId: number
+    isChecked: number
     reason: number
     status: number
     purchaseId: number
@@ -31818,6 +31823,7 @@ export namespace Prisma {
     shortCode?: true
     storeId?: true
     shopId?: true
+    isChecked?: true
     reason?: true
     status?: true
     purchaseId?: true
@@ -31835,6 +31841,7 @@ export namespace Prisma {
     shortCode?: true
     storeId?: true
     shopId?: true
+    isChecked?: true
     reason?: true
     status?: true
     purchaseId?: true
@@ -31852,6 +31859,7 @@ export namespace Prisma {
     shortCode?: true
     storeId?: true
     shopId?: true
+    isChecked?: true
     reason?: true
     status?: true
     purchaseId?: true
@@ -31942,6 +31950,7 @@ export namespace Prisma {
     shortCode: string
     storeId: string | null
     shopId: string | null
+    isChecked: boolean
     reason: $Enums.StockCorrectionReason
     status: $Enums.StockCorrectionStatus
     purchaseId: string | null
@@ -31976,6 +31985,7 @@ export namespace Prisma {
     shortCode?: boolean
     storeId?: boolean
     shopId?: boolean
+    isChecked?: boolean
     reason?: boolean
     status?: boolean
     purchaseId?: boolean
@@ -32003,6 +32013,7 @@ export namespace Prisma {
     shortCode?: boolean
     storeId?: boolean
     shopId?: boolean
+    isChecked?: boolean
     reason?: boolean
     status?: boolean
     purchaseId?: boolean
@@ -32015,7 +32026,7 @@ export namespace Prisma {
     updatedAt?: boolean
   }
 
-  export type StockCorrectionOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "shortCode" | "storeId" | "shopId" | "reason" | "status" | "purchaseId" | "transferId" | "reference" | "notes" | "createdById" | "updatedById" | "createdAt" | "updatedAt", ExtArgs["result"]["stockCorrection"]>
+  export type StockCorrectionOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "shortCode" | "storeId" | "shopId" | "isChecked" | "reason" | "status" | "purchaseId" | "transferId" | "reference" | "notes" | "createdById" | "updatedById" | "createdAt" | "updatedAt", ExtArgs["result"]["stockCorrection"]>
   export type StockCorrectionInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     store?: boolean | StockCorrection$storeArgs<ExtArgs>
     shop?: boolean | StockCorrection$shopArgs<ExtArgs>
@@ -32043,6 +32054,7 @@ export namespace Prisma {
       shortCode: string
       storeId: string | null
       shopId: string | null
+      isChecked: boolean
       reason: $Enums.StockCorrectionReason
       status: $Enums.StockCorrectionStatus
       purchaseId: string | null
@@ -32433,6 +32445,7 @@ export namespace Prisma {
     readonly shortCode: FieldRef<"StockCorrection", 'String'>
     readonly storeId: FieldRef<"StockCorrection", 'String'>
     readonly shopId: FieldRef<"StockCorrection", 'String'>
+    readonly isChecked: FieldRef<"StockCorrection", 'Boolean'>
     readonly reason: FieldRef<"StockCorrection", 'StockCorrectionReason'>
     readonly status: FieldRef<"StockCorrection", 'StockCorrectionStatus'>
     readonly purchaseId: FieldRef<"StockCorrection", 'String'>
@@ -40904,6 +40917,7 @@ export namespace Prisma {
   export type SellStockCorrectionMinAggregateOutputType = {
     id: string | null
     sellId: string | null
+    isChecked: boolean | null
     status: $Enums.SellStockCorrectionStatus | null
     reference: string | null
     notes: string | null
@@ -40917,6 +40931,7 @@ export namespace Prisma {
   export type SellStockCorrectionMaxAggregateOutputType = {
     id: string | null
     sellId: string | null
+    isChecked: boolean | null
     status: $Enums.SellStockCorrectionStatus | null
     reference: string | null
     notes: string | null
@@ -40930,6 +40945,7 @@ export namespace Prisma {
   export type SellStockCorrectionCountAggregateOutputType = {
     id: number
     sellId: number
+    isChecked: number
     status: number
     reference: number
     notes: number
@@ -40953,6 +40969,7 @@ export namespace Prisma {
   export type SellStockCorrectionMinAggregateInputType = {
     id?: true
     sellId?: true
+    isChecked?: true
     status?: true
     reference?: true
     notes?: true
@@ -40966,6 +40983,7 @@ export namespace Prisma {
   export type SellStockCorrectionMaxAggregateInputType = {
     id?: true
     sellId?: true
+    isChecked?: true
     status?: true
     reference?: true
     notes?: true
@@ -40979,6 +40997,7 @@ export namespace Prisma {
   export type SellStockCorrectionCountAggregateInputType = {
     id?: true
     sellId?: true
+    isChecked?: true
     status?: true
     reference?: true
     notes?: true
@@ -41079,6 +41098,7 @@ export namespace Prisma {
   export type SellStockCorrectionGroupByOutputType = {
     id: string
     sellId: string | null
+    isChecked: boolean | null
     status: $Enums.SellStockCorrectionStatus
     reference: string | null
     notes: string | null
@@ -41111,6 +41131,7 @@ export namespace Prisma {
   export type SellStockCorrectionSelect<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetSelect<{
     id?: boolean
     sellId?: boolean
+    isChecked?: boolean
     status?: boolean
     reference?: boolean
     notes?: boolean
@@ -41131,6 +41152,7 @@ export namespace Prisma {
   export type SellStockCorrectionSelectScalar = {
     id?: boolean
     sellId?: boolean
+    isChecked?: boolean
     status?: boolean
     reference?: boolean
     notes?: boolean
@@ -41141,7 +41163,7 @@ export namespace Prisma {
     updatedAt?: boolean
   }
 
-  export type SellStockCorrectionOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "sellId" | "status" | "reference" | "notes" | "createdById" | "updatedById" | "total" | "createdAt" | "updatedAt", ExtArgs["result"]["sellStockCorrection"]>
+  export type SellStockCorrectionOmit<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = $Extensions.GetOmit<"id" | "sellId" | "isChecked" | "status" | "reference" | "notes" | "createdById" | "updatedById" | "total" | "createdAt" | "updatedAt", ExtArgs["result"]["sellStockCorrection"]>
   export type SellStockCorrectionInclude<ExtArgs extends $Extensions.InternalArgs = $Extensions.DefaultArgs> = {
     sell?: boolean | SellStockCorrection$sellArgs<ExtArgs>
     createdBy?: boolean | SellStockCorrection$createdByArgs<ExtArgs>
@@ -41161,6 +41183,7 @@ export namespace Prisma {
     scalars: $Extensions.GetPayloadResult<{
       id: string
       sellId: string | null
+      isChecked: boolean | null
       status: $Enums.SellStockCorrectionStatus
       reference: string | null
       notes: string | null
@@ -41544,6 +41567,7 @@ export namespace Prisma {
   interface SellStockCorrectionFieldRefs {
     readonly id: FieldRef<"SellStockCorrection", 'String'>
     readonly sellId: FieldRef<"SellStockCorrection", 'String'>
+    readonly isChecked: FieldRef<"SellStockCorrection", 'Boolean'>
     readonly status: FieldRef<"SellStockCorrection", 'SellStockCorrectionStatus'>
     readonly reference: FieldRef<"SellStockCorrection", 'String'>
     readonly notes: FieldRef<"SellStockCorrection", 'String'>
@@ -45452,6 +45476,7 @@ export namespace Prisma {
     shortCode: 'shortCode',
     storeId: 'storeId',
     shopId: 'shopId',
+    isChecked: 'isChecked',
     reason: 'reason',
     status: 'status',
     purchaseId: 'purchaseId',
@@ -45594,6 +45619,7 @@ export namespace Prisma {
   export const SellStockCorrectionScalarFieldEnum: {
     id: 'id',
     sellId: 'sellId',
+    isChecked: 'isChecked',
     status: 'status',
     reference: 'reference',
     notes: 'notes',
@@ -48343,6 +48369,7 @@ export namespace Prisma {
     shortCode?: StringFilter<"StockCorrection"> | string
     storeId?: StringNullableFilter<"StockCorrection"> | string | null
     shopId?: StringNullableFilter<"StockCorrection"> | string | null
+    isChecked?: BoolFilter<"StockCorrection"> | boolean
     reason?: EnumStockCorrectionReasonFilter<"StockCorrection"> | $Enums.StockCorrectionReason
     status?: EnumStockCorrectionStatusFilter<"StockCorrection"> | $Enums.StockCorrectionStatus
     purchaseId?: StringNullableFilter<"StockCorrection"> | string | null
@@ -48367,6 +48394,7 @@ export namespace Prisma {
     shortCode?: SortOrder
     storeId?: SortOrderInput | SortOrder
     shopId?: SortOrderInput | SortOrder
+    isChecked?: SortOrder
     reason?: SortOrder
     status?: SortOrder
     purchaseId?: SortOrderInput | SortOrder
@@ -48395,6 +48423,7 @@ export namespace Prisma {
     NOT?: StockCorrectionWhereInput | StockCorrectionWhereInput[]
     storeId?: StringNullableFilter<"StockCorrection"> | string | null
     shopId?: StringNullableFilter<"StockCorrection"> | string | null
+    isChecked?: BoolFilter<"StockCorrection"> | boolean
     reason?: EnumStockCorrectionReasonFilter<"StockCorrection"> | $Enums.StockCorrectionReason
     status?: EnumStockCorrectionStatusFilter<"StockCorrection"> | $Enums.StockCorrectionStatus
     purchaseId?: StringNullableFilter<"StockCorrection"> | string | null
@@ -48419,6 +48448,7 @@ export namespace Prisma {
     shortCode?: SortOrder
     storeId?: SortOrderInput | SortOrder
     shopId?: SortOrderInput | SortOrder
+    isChecked?: SortOrder
     reason?: SortOrder
     status?: SortOrder
     purchaseId?: SortOrderInput | SortOrder
@@ -48442,6 +48472,7 @@ export namespace Prisma {
     shortCode?: StringWithAggregatesFilter<"StockCorrection"> | string
     storeId?: StringNullableWithAggregatesFilter<"StockCorrection"> | string | null
     shopId?: StringNullableWithAggregatesFilter<"StockCorrection"> | string | null
+    isChecked?: BoolWithAggregatesFilter<"StockCorrection"> | boolean
     reason?: EnumStockCorrectionReasonWithAggregatesFilter<"StockCorrection"> | $Enums.StockCorrectionReason
     status?: EnumStockCorrectionStatusWithAggregatesFilter<"StockCorrection"> | $Enums.StockCorrectionStatus
     purchaseId?: StringNullableWithAggregatesFilter<"StockCorrection"> | string | null
@@ -49195,6 +49226,7 @@ export namespace Prisma {
     NOT?: SellStockCorrectionWhereInput | SellStockCorrectionWhereInput[]
     id?: StringFilter<"SellStockCorrection"> | string
     sellId?: StringNullableFilter<"SellStockCorrection"> | string | null
+    isChecked?: BoolNullableFilter<"SellStockCorrection"> | boolean | null
     status?: EnumSellStockCorrectionStatusFilter<"SellStockCorrection"> | $Enums.SellStockCorrectionStatus
     reference?: StringNullableFilter<"SellStockCorrection"> | string | null
     notes?: StringNullableFilter<"SellStockCorrection"> | string | null
@@ -49212,6 +49244,7 @@ export namespace Prisma {
   export type SellStockCorrectionOrderByWithRelationInput = {
     id?: SortOrder
     sellId?: SortOrderInput | SortOrder
+    isChecked?: SortOrderInput | SortOrder
     status?: SortOrder
     reference?: SortOrderInput | SortOrder
     notes?: SortOrderInput | SortOrder
@@ -49233,6 +49266,7 @@ export namespace Prisma {
     OR?: SellStockCorrectionWhereInput[]
     NOT?: SellStockCorrectionWhereInput | SellStockCorrectionWhereInput[]
     sellId?: StringNullableFilter<"SellStockCorrection"> | string | null
+    isChecked?: BoolNullableFilter<"SellStockCorrection"> | boolean | null
     status?: EnumSellStockCorrectionStatusFilter<"SellStockCorrection"> | $Enums.SellStockCorrectionStatus
     reference?: StringNullableFilter<"SellStockCorrection"> | string | null
     notes?: StringNullableFilter<"SellStockCorrection"> | string | null
@@ -49250,6 +49284,7 @@ export namespace Prisma {
   export type SellStockCorrectionOrderByWithAggregationInput = {
     id?: SortOrder
     sellId?: SortOrderInput | SortOrder
+    isChecked?: SortOrderInput | SortOrder
     status?: SortOrder
     reference?: SortOrderInput | SortOrder
     notes?: SortOrderInput | SortOrder
@@ -49271,6 +49306,7 @@ export namespace Prisma {
     NOT?: SellStockCorrectionScalarWhereWithAggregatesInput | SellStockCorrectionScalarWhereWithAggregatesInput[]
     id?: StringWithAggregatesFilter<"SellStockCorrection"> | string
     sellId?: StringNullableWithAggregatesFilter<"SellStockCorrection"> | string | null
+    isChecked?: BoolNullableWithAggregatesFilter<"SellStockCorrection"> | boolean | null
     status?: EnumSellStockCorrectionStatusWithAggregatesFilter<"SellStockCorrection"> | $Enums.SellStockCorrectionStatus
     reference?: StringNullableWithAggregatesFilter<"SellStockCorrection"> | string | null
     notes?: StringNullableWithAggregatesFilter<"SellStockCorrection"> | string | null
@@ -51770,6 +51806,7 @@ export namespace Prisma {
   export type StockCorrectionCreateInput = {
     id?: string
     shortCode: string
+    isChecked?: boolean
     reason: $Enums.StockCorrectionReason
     status?: $Enums.StockCorrectionStatus
     reference?: string | null
@@ -51790,6 +51827,7 @@ export namespace Prisma {
     shortCode: string
     storeId?: string | null
     shopId?: string | null
+    isChecked?: boolean
     reason: $Enums.StockCorrectionReason
     status?: $Enums.StockCorrectionStatus
     purchaseId?: string | null
@@ -51806,6 +51844,7 @@ export namespace Prisma {
   export type StockCorrectionUpdateInput = {
     id?: StringFieldUpdateOperationsInput | string
     shortCode?: StringFieldUpdateOperationsInput | string
+    isChecked?: BoolFieldUpdateOperationsInput | boolean
     reason?: EnumStockCorrectionReasonFieldUpdateOperationsInput | $Enums.StockCorrectionReason
     status?: EnumStockCorrectionStatusFieldUpdateOperationsInput | $Enums.StockCorrectionStatus
     reference?: NullableStringFieldUpdateOperationsInput | string | null
@@ -51826,6 +51865,7 @@ export namespace Prisma {
     shortCode?: StringFieldUpdateOperationsInput | string
     storeId?: NullableStringFieldUpdateOperationsInput | string | null
     shopId?: NullableStringFieldUpdateOperationsInput | string | null
+    isChecked?: BoolFieldUpdateOperationsInput | boolean
     reason?: EnumStockCorrectionReasonFieldUpdateOperationsInput | $Enums.StockCorrectionReason
     status?: EnumStockCorrectionStatusFieldUpdateOperationsInput | $Enums.StockCorrectionStatus
     purchaseId?: NullableStringFieldUpdateOperationsInput | string | null
@@ -51844,6 +51884,7 @@ export namespace Prisma {
     shortCode: string
     storeId?: string | null
     shopId?: string | null
+    isChecked?: boolean
     reason: $Enums.StockCorrectionReason
     status?: $Enums.StockCorrectionStatus
     purchaseId?: string | null
@@ -51859,6 +51900,7 @@ export namespace Prisma {
   export type StockCorrectionUpdateManyMutationInput = {
     id?: StringFieldUpdateOperationsInput | string
     shortCode?: StringFieldUpdateOperationsInput | string
+    isChecked?: BoolFieldUpdateOperationsInput | boolean
     reason?: EnumStockCorrectionReasonFieldUpdateOperationsInput | $Enums.StockCorrectionReason
     status?: EnumStockCorrectionStatusFieldUpdateOperationsInput | $Enums.StockCorrectionStatus
     reference?: NullableStringFieldUpdateOperationsInput | string | null
@@ -51872,6 +51914,7 @@ export namespace Prisma {
     shortCode?: StringFieldUpdateOperationsInput | string
     storeId?: NullableStringFieldUpdateOperationsInput | string | null
     shopId?: NullableStringFieldUpdateOperationsInput | string | null
+    isChecked?: BoolFieldUpdateOperationsInput | boolean
     reason?: EnumStockCorrectionReasonFieldUpdateOperationsInput | $Enums.StockCorrectionReason
     status?: EnumStockCorrectionStatusFieldUpdateOperationsInput | $Enums.StockCorrectionStatus
     purchaseId?: NullableStringFieldUpdateOperationsInput | string | null
@@ -52599,6 +52642,7 @@ export namespace Prisma {
 
   export type SellStockCorrectionCreateInput = {
     id?: string
+    isChecked?: boolean | null
     status?: $Enums.SellStockCorrectionStatus
     reference?: string | null
     notes?: string | null
@@ -52614,6 +52658,7 @@ export namespace Prisma {
   export type SellStockCorrectionUncheckedCreateInput = {
     id?: string
     sellId?: string | null
+    isChecked?: boolean | null
     status?: $Enums.SellStockCorrectionStatus
     reference?: string | null
     notes?: string | null
@@ -52627,6 +52672,7 @@ export namespace Prisma {
 
   export type SellStockCorrectionUpdateInput = {
     id?: StringFieldUpdateOperationsInput | string
+    isChecked?: NullableBoolFieldUpdateOperationsInput | boolean | null
     status?: EnumSellStockCorrectionStatusFieldUpdateOperationsInput | $Enums.SellStockCorrectionStatus
     reference?: NullableStringFieldUpdateOperationsInput | string | null
     notes?: NullableStringFieldUpdateOperationsInput | string | null
@@ -52642,6 +52688,7 @@ export namespace Prisma {
   export type SellStockCorrectionUncheckedUpdateInput = {
     id?: StringFieldUpdateOperationsInput | string
     sellId?: NullableStringFieldUpdateOperationsInput | string | null
+    isChecked?: NullableBoolFieldUpdateOperationsInput | boolean | null
     status?: EnumSellStockCorrectionStatusFieldUpdateOperationsInput | $Enums.SellStockCorrectionStatus
     reference?: NullableStringFieldUpdateOperationsInput | string | null
     notes?: NullableStringFieldUpdateOperationsInput | string | null
@@ -52656,6 +52703,7 @@ export namespace Prisma {
   export type SellStockCorrectionCreateManyInput = {
     id?: string
     sellId?: string | null
+    isChecked?: boolean | null
     status?: $Enums.SellStockCorrectionStatus
     reference?: string | null
     notes?: string | null
@@ -52668,6 +52716,7 @@ export namespace Prisma {
 
   export type SellStockCorrectionUpdateManyMutationInput = {
     id?: StringFieldUpdateOperationsInput | string
+    isChecked?: NullableBoolFieldUpdateOperationsInput | boolean | null
     status?: EnumSellStockCorrectionStatusFieldUpdateOperationsInput | $Enums.SellStockCorrectionStatus
     reference?: NullableStringFieldUpdateOperationsInput | string | null
     notes?: NullableStringFieldUpdateOperationsInput | string | null
@@ -52679,6 +52728,7 @@ export namespace Prisma {
   export type SellStockCorrectionUncheckedUpdateManyInput = {
     id?: StringFieldUpdateOperationsInput | string
     sellId?: NullableStringFieldUpdateOperationsInput | string | null
+    isChecked?: NullableBoolFieldUpdateOperationsInput | boolean | null
     status?: EnumSellStockCorrectionStatusFieldUpdateOperationsInput | $Enums.SellStockCorrectionStatus
     reference?: NullableStringFieldUpdateOperationsInput | string | null
     notes?: NullableStringFieldUpdateOperationsInput | string | null
@@ -54777,6 +54827,7 @@ export namespace Prisma {
     shortCode?: SortOrder
     storeId?: SortOrder
     shopId?: SortOrder
+    isChecked?: SortOrder
     reason?: SortOrder
     status?: SortOrder
     purchaseId?: SortOrder
@@ -54794,6 +54845,7 @@ export namespace Prisma {
     shortCode?: SortOrder
     storeId?: SortOrder
     shopId?: SortOrder
+    isChecked?: SortOrder
     reason?: SortOrder
     status?: SortOrder
     purchaseId?: SortOrder
@@ -54811,6 +54863,7 @@ export namespace Prisma {
     shortCode?: SortOrder
     storeId?: SortOrder
     shopId?: SortOrder
+    isChecked?: SortOrder
     reason?: SortOrder
     status?: SortOrder
     purchaseId?: SortOrder
@@ -55366,6 +55419,11 @@ export namespace Prisma {
     quantity?: SortOrder
   }
 
+  export type BoolNullableFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel> | null
+    not?: NestedBoolNullableFilter<$PrismaModel> | boolean | null
+  }
+
   export type EnumSellStockCorrectionStatusFilter<$PrismaModel = never> = {
     equals?: $Enums.SellStockCorrectionStatus | EnumSellStockCorrectionStatusFieldRefInput<$PrismaModel>
     in?: $Enums.SellStockCorrectionStatus[]
@@ -55387,6 +55445,7 @@ export namespace Prisma {
   export type SellStockCorrectionCountOrderByAggregateInput = {
     id?: SortOrder
     sellId?: SortOrder
+    isChecked?: SortOrder
     status?: SortOrder
     reference?: SortOrder
     notes?: SortOrder
@@ -55404,6 +55463,7 @@ export namespace Prisma {
   export type SellStockCorrectionMaxOrderByAggregateInput = {
     id?: SortOrder
     sellId?: SortOrder
+    isChecked?: SortOrder
     status?: SortOrder
     reference?: SortOrder
     notes?: SortOrder
@@ -55417,6 +55477,7 @@ export namespace Prisma {
   export type SellStockCorrectionMinOrderByAggregateInput = {
     id?: SortOrder
     sellId?: SortOrder
+    isChecked?: SortOrder
     status?: SortOrder
     reference?: SortOrder
     notes?: SortOrder
@@ -55429,6 +55490,14 @@ export namespace Prisma {
 
   export type SellStockCorrectionSumOrderByAggregateInput = {
     total?: SortOrder
+  }
+
+  export type BoolNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel> | null
+    not?: NestedBoolNullableWithAggregatesFilter<$PrismaModel> | boolean | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedBoolNullableFilter<$PrismaModel>
+    _max?: NestedBoolNullableFilter<$PrismaModel>
   }
 
   export type EnumSellStockCorrectionStatusWithAggregatesFilter<$PrismaModel = never> = {
@@ -60969,6 +61038,10 @@ export namespace Prisma {
     connect?: SellStockCorrectionItemWhereUniqueInput | SellStockCorrectionItemWhereUniqueInput[]
   }
 
+  export type NullableBoolFieldUpdateOperationsInput = {
+    set?: boolean | null
+  }
+
   export type EnumSellStockCorrectionStatusFieldUpdateOperationsInput = {
     set?: $Enums.SellStockCorrectionStatus
   }
@@ -61633,11 +61706,24 @@ export namespace Prisma {
     _max?: NestedEnumItemSaleStatusFilter<$PrismaModel>
   }
 
+  export type NestedBoolNullableFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel> | null
+    not?: NestedBoolNullableFilter<$PrismaModel> | boolean | null
+  }
+
   export type NestedEnumSellStockCorrectionStatusFilter<$PrismaModel = never> = {
     equals?: $Enums.SellStockCorrectionStatus | EnumSellStockCorrectionStatusFieldRefInput<$PrismaModel>
     in?: $Enums.SellStockCorrectionStatus[]
     notIn?: $Enums.SellStockCorrectionStatus[]
     not?: NestedEnumSellStockCorrectionStatusFilter<$PrismaModel> | $Enums.SellStockCorrectionStatus
+  }
+
+  export type NestedBoolNullableWithAggregatesFilter<$PrismaModel = never> = {
+    equals?: boolean | BooleanFieldRefInput<$PrismaModel> | null
+    not?: NestedBoolNullableWithAggregatesFilter<$PrismaModel> | boolean | null
+    _count?: NestedIntNullableFilter<$PrismaModel>
+    _min?: NestedBoolNullableFilter<$PrismaModel>
+    _max?: NestedBoolNullableFilter<$PrismaModel>
   }
 
   export type NestedEnumSellStockCorrectionStatusWithAggregatesFilter<$PrismaModel = never> = {
@@ -62083,6 +62169,7 @@ export namespace Prisma {
   export type StockCorrectionCreateWithoutCreatedByInput = {
     id?: string
     shortCode: string
+    isChecked?: boolean
     reason: $Enums.StockCorrectionReason
     status?: $Enums.StockCorrectionStatus
     reference?: string | null
@@ -62102,6 +62189,7 @@ export namespace Prisma {
     shortCode: string
     storeId?: string | null
     shopId?: string | null
+    isChecked?: boolean
     reason: $Enums.StockCorrectionReason
     status?: $Enums.StockCorrectionStatus
     purchaseId?: string | null
@@ -62127,6 +62215,7 @@ export namespace Prisma {
   export type StockCorrectionCreateWithoutUpdatedByInput = {
     id?: string
     shortCode: string
+    isChecked?: boolean
     reason: $Enums.StockCorrectionReason
     status?: $Enums.StockCorrectionStatus
     reference?: string | null
@@ -62146,6 +62235,7 @@ export namespace Prisma {
     shortCode: string
     storeId?: string | null
     shopId?: string | null
+    isChecked?: boolean
     reason: $Enums.StockCorrectionReason
     status?: $Enums.StockCorrectionStatus
     purchaseId?: string | null
@@ -62282,6 +62372,7 @@ export namespace Prisma {
 
   export type SellStockCorrectionCreateWithoutCreatedByInput = {
     id?: string
+    isChecked?: boolean | null
     status?: $Enums.SellStockCorrectionStatus
     reference?: string | null
     notes?: string | null
@@ -62296,6 +62387,7 @@ export namespace Prisma {
   export type SellStockCorrectionUncheckedCreateWithoutCreatedByInput = {
     id?: string
     sellId?: string | null
+    isChecked?: boolean | null
     status?: $Enums.SellStockCorrectionStatus
     reference?: string | null
     notes?: string | null
@@ -62318,6 +62410,7 @@ export namespace Prisma {
 
   export type SellStockCorrectionCreateWithoutUpdatedByInput = {
     id?: string
+    isChecked?: boolean | null
     status?: $Enums.SellStockCorrectionStatus
     reference?: string | null
     notes?: string | null
@@ -62332,6 +62425,7 @@ export namespace Prisma {
   export type SellStockCorrectionUncheckedCreateWithoutUpdatedByInput = {
     id?: string
     sellId?: string | null
+    isChecked?: boolean | null
     status?: $Enums.SellStockCorrectionStatus
     reference?: string | null
     notes?: string | null
@@ -62933,6 +63027,7 @@ export namespace Prisma {
     shortCode?: StringFilter<"StockCorrection"> | string
     storeId?: StringNullableFilter<"StockCorrection"> | string | null
     shopId?: StringNullableFilter<"StockCorrection"> | string | null
+    isChecked?: BoolFilter<"StockCorrection"> | boolean
     reason?: EnumStockCorrectionReasonFilter<"StockCorrection"> | $Enums.StockCorrectionReason
     status?: EnumStockCorrectionStatusFilter<"StockCorrection"> | $Enums.StockCorrectionStatus
     purchaseId?: StringNullableFilter<"StockCorrection"> | string | null
@@ -63040,6 +63135,7 @@ export namespace Prisma {
     NOT?: SellStockCorrectionScalarWhereInput | SellStockCorrectionScalarWhereInput[]
     id?: StringFilter<"SellStockCorrection"> | string
     sellId?: StringNullableFilter<"SellStockCorrection"> | string | null
+    isChecked?: BoolNullableFilter<"SellStockCorrection"> | boolean | null
     status?: EnumSellStockCorrectionStatusFilter<"SellStockCorrection"> | $Enums.SellStockCorrectionStatus
     reference?: StringNullableFilter<"SellStockCorrection"> | string | null
     notes?: StringNullableFilter<"SellStockCorrection"> | string | null
@@ -64128,6 +64224,7 @@ export namespace Prisma {
   export type StockCorrectionCreateWithoutShopInput = {
     id?: string
     shortCode: string
+    isChecked?: boolean
     reason: $Enums.StockCorrectionReason
     status?: $Enums.StockCorrectionStatus
     reference?: string | null
@@ -64146,6 +64243,7 @@ export namespace Prisma {
     id?: string
     shortCode: string
     storeId?: string | null
+    isChecked?: boolean
     reason: $Enums.StockCorrectionReason
     status?: $Enums.StockCorrectionStatus
     purchaseId?: string | null
@@ -65101,6 +65199,7 @@ export namespace Prisma {
   export type StockCorrectionCreateWithoutStoreInput = {
     id?: string
     shortCode: string
+    isChecked?: boolean
     reason: $Enums.StockCorrectionReason
     status?: $Enums.StockCorrectionStatus
     reference?: string | null
@@ -65119,6 +65218,7 @@ export namespace Prisma {
     id?: string
     shortCode: string
     shopId?: string | null
+    isChecked?: boolean
     reason: $Enums.StockCorrectionReason
     status?: $Enums.StockCorrectionStatus
     purchaseId?: string | null
@@ -69441,6 +69541,7 @@ export namespace Prisma {
   export type StockCorrectionCreateWithoutPurchaseInput = {
     id?: string
     shortCode: string
+    isChecked?: boolean
     reason: $Enums.StockCorrectionReason
     status?: $Enums.StockCorrectionStatus
     reference?: string | null
@@ -69460,6 +69561,7 @@ export namespace Prisma {
     shortCode: string
     storeId?: string | null
     shopId?: string | null
+    isChecked?: boolean
     reason: $Enums.StockCorrectionReason
     status?: $Enums.StockCorrectionStatus
     transferId?: string | null
@@ -70479,6 +70581,7 @@ export namespace Prisma {
   export type StockCorrectionCreateWithoutTransferInput = {
     id?: string
     shortCode: string
+    isChecked?: boolean
     reason: $Enums.StockCorrectionReason
     status?: $Enums.StockCorrectionStatus
     reference?: string | null
@@ -70498,6 +70601,7 @@ export namespace Prisma {
     shortCode: string
     storeId?: string | null
     shopId?: string | null
+    isChecked?: boolean
     reason: $Enums.StockCorrectionReason
     status?: $Enums.StockCorrectionStatus
     purchaseId?: string | null
@@ -71999,6 +72103,7 @@ export namespace Prisma {
   export type StockCorrectionCreateWithoutItemsInput = {
     id?: string
     shortCode: string
+    isChecked?: boolean
     reason: $Enums.StockCorrectionReason
     status?: $Enums.StockCorrectionStatus
     reference?: string | null
@@ -72018,6 +72123,7 @@ export namespace Prisma {
     shortCode: string
     storeId?: string | null
     shopId?: string | null
+    isChecked?: boolean
     reason: $Enums.StockCorrectionReason
     status?: $Enums.StockCorrectionStatus
     purchaseId?: string | null
@@ -72184,6 +72290,7 @@ export namespace Prisma {
   export type StockCorrectionUpdateWithoutItemsInput = {
     id?: StringFieldUpdateOperationsInput | string
     shortCode?: StringFieldUpdateOperationsInput | string
+    isChecked?: BoolFieldUpdateOperationsInput | boolean
     reason?: EnumStockCorrectionReasonFieldUpdateOperationsInput | $Enums.StockCorrectionReason
     status?: EnumStockCorrectionStatusFieldUpdateOperationsInput | $Enums.StockCorrectionStatus
     reference?: NullableStringFieldUpdateOperationsInput | string | null
@@ -72203,6 +72310,7 @@ export namespace Prisma {
     shortCode?: StringFieldUpdateOperationsInput | string
     storeId?: NullableStringFieldUpdateOperationsInput | string | null
     shopId?: NullableStringFieldUpdateOperationsInput | string | null
+    isChecked?: BoolFieldUpdateOperationsInput | boolean
     reason?: EnumStockCorrectionReasonFieldUpdateOperationsInput | $Enums.StockCorrectionReason
     status?: EnumStockCorrectionStatusFieldUpdateOperationsInput | $Enums.StockCorrectionStatus
     purchaseId?: NullableStringFieldUpdateOperationsInput | string | null
@@ -72626,6 +72734,7 @@ export namespace Prisma {
 
   export type SellStockCorrectionCreateWithoutSellInput = {
     id?: string
+    isChecked?: boolean | null
     status?: $Enums.SellStockCorrectionStatus
     reference?: string | null
     notes?: string | null
@@ -72639,6 +72748,7 @@ export namespace Prisma {
 
   export type SellStockCorrectionUncheckedCreateWithoutSellInput = {
     id?: string
+    isChecked?: boolean | null
     status?: $Enums.SellStockCorrectionStatus
     reference?: string | null
     notes?: string | null
@@ -76152,6 +76262,7 @@ export namespace Prisma {
 
   export type SellStockCorrectionCreateWithoutItemsInput = {
     id?: string
+    isChecked?: boolean | null
     status?: $Enums.SellStockCorrectionStatus
     reference?: string | null
     notes?: string | null
@@ -76166,6 +76277,7 @@ export namespace Prisma {
   export type SellStockCorrectionUncheckedCreateWithoutItemsInput = {
     id?: string
     sellId?: string | null
+    isChecked?: boolean | null
     status?: $Enums.SellStockCorrectionStatus
     reference?: string | null
     notes?: string | null
@@ -76349,6 +76461,7 @@ export namespace Prisma {
 
   export type SellStockCorrectionUpdateWithoutItemsInput = {
     id?: StringFieldUpdateOperationsInput | string
+    isChecked?: NullableBoolFieldUpdateOperationsInput | boolean | null
     status?: EnumSellStockCorrectionStatusFieldUpdateOperationsInput | $Enums.SellStockCorrectionStatus
     reference?: NullableStringFieldUpdateOperationsInput | string | null
     notes?: NullableStringFieldUpdateOperationsInput | string | null
@@ -76363,6 +76476,7 @@ export namespace Prisma {
   export type SellStockCorrectionUncheckedUpdateWithoutItemsInput = {
     id?: StringFieldUpdateOperationsInput | string
     sellId?: NullableStringFieldUpdateOperationsInput | string | null
+    isChecked?: NullableBoolFieldUpdateOperationsInput | boolean | null
     status?: EnumSellStockCorrectionStatusFieldUpdateOperationsInput | $Enums.SellStockCorrectionStatus
     reference?: NullableStringFieldUpdateOperationsInput | string | null
     notes?: NullableStringFieldUpdateOperationsInput | string | null
@@ -76976,6 +77090,7 @@ export namespace Prisma {
     shortCode: string
     storeId?: string | null
     shopId?: string | null
+    isChecked?: boolean
     reason: $Enums.StockCorrectionReason
     status?: $Enums.StockCorrectionStatus
     purchaseId?: string | null
@@ -76992,6 +77107,7 @@ export namespace Prisma {
     shortCode: string
     storeId?: string | null
     shopId?: string | null
+    isChecked?: boolean
     reason: $Enums.StockCorrectionReason
     status?: $Enums.StockCorrectionStatus
     purchaseId?: string | null
@@ -77048,6 +77164,7 @@ export namespace Prisma {
   export type SellStockCorrectionCreateManyCreatedByInput = {
     id?: string
     sellId?: string | null
+    isChecked?: boolean | null
     status?: $Enums.SellStockCorrectionStatus
     reference?: string | null
     notes?: string | null
@@ -77060,6 +77177,7 @@ export namespace Prisma {
   export type SellStockCorrectionCreateManyUpdatedByInput = {
     id?: string
     sellId?: string | null
+    isChecked?: boolean | null
     status?: $Enums.SellStockCorrectionStatus
     reference?: string | null
     notes?: string | null
@@ -77543,6 +77661,7 @@ export namespace Prisma {
   export type StockCorrectionUpdateWithoutCreatedByInput = {
     id?: StringFieldUpdateOperationsInput | string
     shortCode?: StringFieldUpdateOperationsInput | string
+    isChecked?: BoolFieldUpdateOperationsInput | boolean
     reason?: EnumStockCorrectionReasonFieldUpdateOperationsInput | $Enums.StockCorrectionReason
     status?: EnumStockCorrectionStatusFieldUpdateOperationsInput | $Enums.StockCorrectionStatus
     reference?: NullableStringFieldUpdateOperationsInput | string | null
@@ -77562,6 +77681,7 @@ export namespace Prisma {
     shortCode?: StringFieldUpdateOperationsInput | string
     storeId?: NullableStringFieldUpdateOperationsInput | string | null
     shopId?: NullableStringFieldUpdateOperationsInput | string | null
+    isChecked?: BoolFieldUpdateOperationsInput | boolean
     reason?: EnumStockCorrectionReasonFieldUpdateOperationsInput | $Enums.StockCorrectionReason
     status?: EnumStockCorrectionStatusFieldUpdateOperationsInput | $Enums.StockCorrectionStatus
     purchaseId?: NullableStringFieldUpdateOperationsInput | string | null
@@ -77579,6 +77699,7 @@ export namespace Prisma {
     shortCode?: StringFieldUpdateOperationsInput | string
     storeId?: NullableStringFieldUpdateOperationsInput | string | null
     shopId?: NullableStringFieldUpdateOperationsInput | string | null
+    isChecked?: BoolFieldUpdateOperationsInput | boolean
     reason?: EnumStockCorrectionReasonFieldUpdateOperationsInput | $Enums.StockCorrectionReason
     status?: EnumStockCorrectionStatusFieldUpdateOperationsInput | $Enums.StockCorrectionStatus
     purchaseId?: NullableStringFieldUpdateOperationsInput | string | null
@@ -77593,6 +77714,7 @@ export namespace Prisma {
   export type StockCorrectionUpdateWithoutUpdatedByInput = {
     id?: StringFieldUpdateOperationsInput | string
     shortCode?: StringFieldUpdateOperationsInput | string
+    isChecked?: BoolFieldUpdateOperationsInput | boolean
     reason?: EnumStockCorrectionReasonFieldUpdateOperationsInput | $Enums.StockCorrectionReason
     status?: EnumStockCorrectionStatusFieldUpdateOperationsInput | $Enums.StockCorrectionStatus
     reference?: NullableStringFieldUpdateOperationsInput | string | null
@@ -77612,6 +77734,7 @@ export namespace Prisma {
     shortCode?: StringFieldUpdateOperationsInput | string
     storeId?: NullableStringFieldUpdateOperationsInput | string | null
     shopId?: NullableStringFieldUpdateOperationsInput | string | null
+    isChecked?: BoolFieldUpdateOperationsInput | boolean
     reason?: EnumStockCorrectionReasonFieldUpdateOperationsInput | $Enums.StockCorrectionReason
     status?: EnumStockCorrectionStatusFieldUpdateOperationsInput | $Enums.StockCorrectionStatus
     purchaseId?: NullableStringFieldUpdateOperationsInput | string | null
@@ -77629,6 +77752,7 @@ export namespace Prisma {
     shortCode?: StringFieldUpdateOperationsInput | string
     storeId?: NullableStringFieldUpdateOperationsInput | string | null
     shopId?: NullableStringFieldUpdateOperationsInput | string | null
+    isChecked?: BoolFieldUpdateOperationsInput | boolean
     reason?: EnumStockCorrectionReasonFieldUpdateOperationsInput | $Enums.StockCorrectionReason
     status?: EnumStockCorrectionStatusFieldUpdateOperationsInput | $Enums.StockCorrectionStatus
     purchaseId?: NullableStringFieldUpdateOperationsInput | string | null
@@ -77776,6 +77900,7 @@ export namespace Prisma {
 
   export type SellStockCorrectionUpdateWithoutCreatedByInput = {
     id?: StringFieldUpdateOperationsInput | string
+    isChecked?: NullableBoolFieldUpdateOperationsInput | boolean | null
     status?: EnumSellStockCorrectionStatusFieldUpdateOperationsInput | $Enums.SellStockCorrectionStatus
     reference?: NullableStringFieldUpdateOperationsInput | string | null
     notes?: NullableStringFieldUpdateOperationsInput | string | null
@@ -77790,6 +77915,7 @@ export namespace Prisma {
   export type SellStockCorrectionUncheckedUpdateWithoutCreatedByInput = {
     id?: StringFieldUpdateOperationsInput | string
     sellId?: NullableStringFieldUpdateOperationsInput | string | null
+    isChecked?: NullableBoolFieldUpdateOperationsInput | boolean | null
     status?: EnumSellStockCorrectionStatusFieldUpdateOperationsInput | $Enums.SellStockCorrectionStatus
     reference?: NullableStringFieldUpdateOperationsInput | string | null
     notes?: NullableStringFieldUpdateOperationsInput | string | null
@@ -77803,6 +77929,7 @@ export namespace Prisma {
   export type SellStockCorrectionUncheckedUpdateManyWithoutCreatedByInput = {
     id?: StringFieldUpdateOperationsInput | string
     sellId?: NullableStringFieldUpdateOperationsInput | string | null
+    isChecked?: NullableBoolFieldUpdateOperationsInput | boolean | null
     status?: EnumSellStockCorrectionStatusFieldUpdateOperationsInput | $Enums.SellStockCorrectionStatus
     reference?: NullableStringFieldUpdateOperationsInput | string | null
     notes?: NullableStringFieldUpdateOperationsInput | string | null
@@ -77814,6 +77941,7 @@ export namespace Prisma {
 
   export type SellStockCorrectionUpdateWithoutUpdatedByInput = {
     id?: StringFieldUpdateOperationsInput | string
+    isChecked?: NullableBoolFieldUpdateOperationsInput | boolean | null
     status?: EnumSellStockCorrectionStatusFieldUpdateOperationsInput | $Enums.SellStockCorrectionStatus
     reference?: NullableStringFieldUpdateOperationsInput | string | null
     notes?: NullableStringFieldUpdateOperationsInput | string | null
@@ -77828,6 +77956,7 @@ export namespace Prisma {
   export type SellStockCorrectionUncheckedUpdateWithoutUpdatedByInput = {
     id?: StringFieldUpdateOperationsInput | string
     sellId?: NullableStringFieldUpdateOperationsInput | string | null
+    isChecked?: NullableBoolFieldUpdateOperationsInput | boolean | null
     status?: EnumSellStockCorrectionStatusFieldUpdateOperationsInput | $Enums.SellStockCorrectionStatus
     reference?: NullableStringFieldUpdateOperationsInput | string | null
     notes?: NullableStringFieldUpdateOperationsInput | string | null
@@ -77841,6 +77970,7 @@ export namespace Prisma {
   export type SellStockCorrectionUncheckedUpdateManyWithoutUpdatedByInput = {
     id?: StringFieldUpdateOperationsInput | string
     sellId?: NullableStringFieldUpdateOperationsInput | string | null
+    isChecked?: NullableBoolFieldUpdateOperationsInput | boolean | null
     status?: EnumSellStockCorrectionStatusFieldUpdateOperationsInput | $Enums.SellStockCorrectionStatus
     reference?: NullableStringFieldUpdateOperationsInput | string | null
     notes?: NullableStringFieldUpdateOperationsInput | string | null
@@ -78790,6 +78920,7 @@ export namespace Prisma {
     id?: string
     shortCode: string
     storeId?: string | null
+    isChecked?: boolean
     reason: $Enums.StockCorrectionReason
     status?: $Enums.StockCorrectionStatus
     purchaseId?: string | null
@@ -79077,6 +79208,7 @@ export namespace Prisma {
   export type StockCorrectionUpdateWithoutShopInput = {
     id?: StringFieldUpdateOperationsInput | string
     shortCode?: StringFieldUpdateOperationsInput | string
+    isChecked?: BoolFieldUpdateOperationsInput | boolean
     reason?: EnumStockCorrectionReasonFieldUpdateOperationsInput | $Enums.StockCorrectionReason
     status?: EnumStockCorrectionStatusFieldUpdateOperationsInput | $Enums.StockCorrectionStatus
     reference?: NullableStringFieldUpdateOperationsInput | string | null
@@ -79095,6 +79227,7 @@ export namespace Prisma {
     id?: StringFieldUpdateOperationsInput | string
     shortCode?: StringFieldUpdateOperationsInput | string
     storeId?: NullableStringFieldUpdateOperationsInput | string | null
+    isChecked?: BoolFieldUpdateOperationsInput | boolean
     reason?: EnumStockCorrectionReasonFieldUpdateOperationsInput | $Enums.StockCorrectionReason
     status?: EnumStockCorrectionStatusFieldUpdateOperationsInput | $Enums.StockCorrectionStatus
     purchaseId?: NullableStringFieldUpdateOperationsInput | string | null
@@ -79112,6 +79245,7 @@ export namespace Prisma {
     id?: StringFieldUpdateOperationsInput | string
     shortCode?: StringFieldUpdateOperationsInput | string
     storeId?: NullableStringFieldUpdateOperationsInput | string | null
+    isChecked?: BoolFieldUpdateOperationsInput | boolean
     reason?: EnumStockCorrectionReasonFieldUpdateOperationsInput | $Enums.StockCorrectionReason
     status?: EnumStockCorrectionStatusFieldUpdateOperationsInput | $Enums.StockCorrectionStatus
     purchaseId?: NullableStringFieldUpdateOperationsInput | string | null
@@ -79544,6 +79678,7 @@ export namespace Prisma {
     id?: string
     shortCode: string
     shopId?: string | null
+    isChecked?: boolean
     reason: $Enums.StockCorrectionReason
     status?: $Enums.StockCorrectionStatus
     purchaseId?: string | null
@@ -79870,6 +80005,7 @@ export namespace Prisma {
   export type StockCorrectionUpdateWithoutStoreInput = {
     id?: StringFieldUpdateOperationsInput | string
     shortCode?: StringFieldUpdateOperationsInput | string
+    isChecked?: BoolFieldUpdateOperationsInput | boolean
     reason?: EnumStockCorrectionReasonFieldUpdateOperationsInput | $Enums.StockCorrectionReason
     status?: EnumStockCorrectionStatusFieldUpdateOperationsInput | $Enums.StockCorrectionStatus
     reference?: NullableStringFieldUpdateOperationsInput | string | null
@@ -79888,6 +80024,7 @@ export namespace Prisma {
     id?: StringFieldUpdateOperationsInput | string
     shortCode?: StringFieldUpdateOperationsInput | string
     shopId?: NullableStringFieldUpdateOperationsInput | string | null
+    isChecked?: BoolFieldUpdateOperationsInput | boolean
     reason?: EnumStockCorrectionReasonFieldUpdateOperationsInput | $Enums.StockCorrectionReason
     status?: EnumStockCorrectionStatusFieldUpdateOperationsInput | $Enums.StockCorrectionStatus
     purchaseId?: NullableStringFieldUpdateOperationsInput | string | null
@@ -79905,6 +80042,7 @@ export namespace Prisma {
     id?: StringFieldUpdateOperationsInput | string
     shortCode?: StringFieldUpdateOperationsInput | string
     shopId?: NullableStringFieldUpdateOperationsInput | string | null
+    isChecked?: BoolFieldUpdateOperationsInput | boolean
     reason?: EnumStockCorrectionReasonFieldUpdateOperationsInput | $Enums.StockCorrectionReason
     status?: EnumStockCorrectionStatusFieldUpdateOperationsInput | $Enums.StockCorrectionStatus
     purchaseId?: NullableStringFieldUpdateOperationsInput | string | null
@@ -81827,6 +81965,7 @@ export namespace Prisma {
     shortCode: string
     storeId?: string | null
     shopId?: string | null
+    isChecked?: boolean
     reason: $Enums.StockCorrectionReason
     status?: $Enums.StockCorrectionStatus
     transferId?: string | null
@@ -81877,6 +82016,7 @@ export namespace Prisma {
   export type StockCorrectionUpdateWithoutPurchaseInput = {
     id?: StringFieldUpdateOperationsInput | string
     shortCode?: StringFieldUpdateOperationsInput | string
+    isChecked?: BoolFieldUpdateOperationsInput | boolean
     reason?: EnumStockCorrectionReasonFieldUpdateOperationsInput | $Enums.StockCorrectionReason
     status?: EnumStockCorrectionStatusFieldUpdateOperationsInput | $Enums.StockCorrectionStatus
     reference?: NullableStringFieldUpdateOperationsInput | string | null
@@ -81896,6 +82036,7 @@ export namespace Prisma {
     shortCode?: StringFieldUpdateOperationsInput | string
     storeId?: NullableStringFieldUpdateOperationsInput | string | null
     shopId?: NullableStringFieldUpdateOperationsInput | string | null
+    isChecked?: BoolFieldUpdateOperationsInput | boolean
     reason?: EnumStockCorrectionReasonFieldUpdateOperationsInput | $Enums.StockCorrectionReason
     status?: EnumStockCorrectionStatusFieldUpdateOperationsInput | $Enums.StockCorrectionStatus
     transferId?: NullableStringFieldUpdateOperationsInput | string | null
@@ -81913,6 +82054,7 @@ export namespace Prisma {
     shortCode?: StringFieldUpdateOperationsInput | string
     storeId?: NullableStringFieldUpdateOperationsInput | string | null
     shopId?: NullableStringFieldUpdateOperationsInput | string | null
+    isChecked?: BoolFieldUpdateOperationsInput | boolean
     reason?: EnumStockCorrectionReasonFieldUpdateOperationsInput | $Enums.StockCorrectionReason
     status?: EnumStockCorrectionStatusFieldUpdateOperationsInput | $Enums.StockCorrectionStatus
     transferId?: NullableStringFieldUpdateOperationsInput | string | null
@@ -81939,6 +82081,7 @@ export namespace Prisma {
     shortCode: string
     storeId?: string | null
     shopId?: string | null
+    isChecked?: boolean
     reason: $Enums.StockCorrectionReason
     status?: $Enums.StockCorrectionStatus
     purchaseId?: string | null
@@ -81983,6 +82126,7 @@ export namespace Prisma {
   export type StockCorrectionUpdateWithoutTransferInput = {
     id?: StringFieldUpdateOperationsInput | string
     shortCode?: StringFieldUpdateOperationsInput | string
+    isChecked?: BoolFieldUpdateOperationsInput | boolean
     reason?: EnumStockCorrectionReasonFieldUpdateOperationsInput | $Enums.StockCorrectionReason
     status?: EnumStockCorrectionStatusFieldUpdateOperationsInput | $Enums.StockCorrectionStatus
     reference?: NullableStringFieldUpdateOperationsInput | string | null
@@ -82002,6 +82146,7 @@ export namespace Prisma {
     shortCode?: StringFieldUpdateOperationsInput | string
     storeId?: NullableStringFieldUpdateOperationsInput | string | null
     shopId?: NullableStringFieldUpdateOperationsInput | string | null
+    isChecked?: BoolFieldUpdateOperationsInput | boolean
     reason?: EnumStockCorrectionReasonFieldUpdateOperationsInput | $Enums.StockCorrectionReason
     status?: EnumStockCorrectionStatusFieldUpdateOperationsInput | $Enums.StockCorrectionStatus
     purchaseId?: NullableStringFieldUpdateOperationsInput | string | null
@@ -82019,6 +82164,7 @@ export namespace Prisma {
     shortCode?: StringFieldUpdateOperationsInput | string
     storeId?: NullableStringFieldUpdateOperationsInput | string | null
     shopId?: NullableStringFieldUpdateOperationsInput | string | null
+    isChecked?: BoolFieldUpdateOperationsInput | boolean
     reason?: EnumStockCorrectionReasonFieldUpdateOperationsInput | $Enums.StockCorrectionReason
     status?: EnumStockCorrectionStatusFieldUpdateOperationsInput | $Enums.StockCorrectionStatus
     purchaseId?: NullableStringFieldUpdateOperationsInput | string | null
@@ -82085,6 +82231,7 @@ export namespace Prisma {
 
   export type SellStockCorrectionCreateManySellInput = {
     id?: string
+    isChecked?: boolean | null
     status?: $Enums.SellStockCorrectionStatus
     reference?: string | null
     notes?: string | null
@@ -82138,6 +82285,7 @@ export namespace Prisma {
 
   export type SellStockCorrectionUpdateWithoutSellInput = {
     id?: StringFieldUpdateOperationsInput | string
+    isChecked?: NullableBoolFieldUpdateOperationsInput | boolean | null
     status?: EnumSellStockCorrectionStatusFieldUpdateOperationsInput | $Enums.SellStockCorrectionStatus
     reference?: NullableStringFieldUpdateOperationsInput | string | null
     notes?: NullableStringFieldUpdateOperationsInput | string | null
@@ -82151,6 +82299,7 @@ export namespace Prisma {
 
   export type SellStockCorrectionUncheckedUpdateWithoutSellInput = {
     id?: StringFieldUpdateOperationsInput | string
+    isChecked?: NullableBoolFieldUpdateOperationsInput | boolean | null
     status?: EnumSellStockCorrectionStatusFieldUpdateOperationsInput | $Enums.SellStockCorrectionStatus
     reference?: NullableStringFieldUpdateOperationsInput | string | null
     notes?: NullableStringFieldUpdateOperationsInput | string | null
@@ -82164,6 +82313,7 @@ export namespace Prisma {
 
   export type SellStockCorrectionUncheckedUpdateManyWithoutSellInput = {
     id?: StringFieldUpdateOperationsInput | string
+    isChecked?: NullableBoolFieldUpdateOperationsInput | boolean | null
     status?: EnumSellStockCorrectionStatusFieldUpdateOperationsInput | $Enums.SellStockCorrectionStatus
     reference?: NullableStringFieldUpdateOperationsInput | string | null
     notes?: NullableStringFieldUpdateOperationsInput | string | null

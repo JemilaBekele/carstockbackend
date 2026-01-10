@@ -401,6 +401,7 @@ exports.Prisma.StockCorrectionScalarFieldEnum = {
   shortCode: 'shortCode',
   storeId: 'storeId',
   shopId: 'shopId',
+  isChecked: 'isChecked',
   reason: 'reason',
   status: 'status',
   purchaseId: 'purchaseId',
@@ -519,6 +520,7 @@ exports.Prisma.WaitlistScalarFieldEnum = {
 exports.Prisma.SellStockCorrectionScalarFieldEnum = {
   id: 'id',
   sellId: 'sellId',
+  isChecked: 'isChecked',
   status: 'status',
   reference: 'reference',
   notes: 'notes',
@@ -946,7 +948,8 @@ exports.SaleStatus = exports.$Enums.SaleStatus = {
 
 exports.ItemSaleStatus = exports.$Enums.ItemSaleStatus = {
   PENDING: 'PENDING',
-  DELIVERED: 'DELIVERED'
+  DELIVERED: 'DELIVERED',
+  REJECTED: 'REJECTED'
 };
 
 exports.SellStockCorrectionStatus = exports.$Enums.SellStockCorrectionStatus = {
@@ -959,6 +962,7 @@ exports.SellStockCorrectionStatus = exports.$Enums.SellStockCorrectionStatus = {
 exports.NotificationType = exports.$Enums.NotificationType = {
   SELL_READY_FOR_DELIVERY: 'SELL_READY_FOR_DELIVERY',
   SELL_CANCELLED: 'SELL_CANCELLED',
+  Done: 'Done',
   Payment: 'Payment',
   Inventory: 'Inventory',
   System: 'System',
