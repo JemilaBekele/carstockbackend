@@ -6,4 +6,3 @@ uploads
 prisma/dev.db
 prisma/dev.db-journal
 prisma/*.db
-prisma/migrations
