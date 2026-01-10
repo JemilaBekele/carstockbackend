@@ -874,7 +874,7 @@ model SellStockCorrection {
   id          String                     @id @default(uuid()) @map("_id") @db.Char(36)
   sellId      String?                    @db.Char(36)
   sell        Sell?                      @relation(fields: [sellId], references: [id])
-  isChecked Boolean? @default(false) // Make sure this field exists
+  isChecked Boolean? @default(false) 
   isCh Boolean? @default(false) // Make sure this field exists
 
   status      SellStockCorrectionStatus  @default(PENDING)
