@@ -122,9 +122,28 @@ const getAllStockCorrections = async ({ startDate, endDate } = {}) => {
       orderBy: {
         createdAt: 'desc',
       },
-      include: {
-        store: true,
-        shop: true,
+      select: {
+        id: true,
+        createdAt: true,
+        updatedAt: true,
+        description: true,
+        // Explicitly select store WITHOUT any nested stock_corrections
+        store: {
+          select: {
+            id: true,
+            name: true,
+            // Don't include any relations that might have isChecked
+          },
+        },
+        storeId: true,
+        shop: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        shopId: true,
+        items: true,
         _count: {
           select: { items: true },
         },
