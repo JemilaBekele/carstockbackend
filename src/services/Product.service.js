@@ -1879,24 +1879,42 @@ const getTopSellingProducts = async (
       }
     : {};
 
-  // FIX: Get top selling products WITHIN the subcategory filter
-  console.log('📈 Getting top selling products from sell items WITH subcategory filter...');
+  console.log('📈 Getting top selling products from sell items WITH category/subcategory filter...');
   
-  // First, get product IDs in the filtered subcategory
-  let productIdsInSubCategory = [];
-  if (subCategoryIds.length > 0) {
-    const productsInSubCategory = await prisma.product.findMany({
-      where: {
-        isActive: true,
-        subCategoryId: { in: subCategoryIds }
-      },
+  // First, get product IDs in the filtered category/subcategory
+  let productIdsInFilter = [];
+  
+  if (categoryId || subCategoryIds.length > 0) {
+    const productWhere = {
+      isActive: true,
+    };
+    
+    if (categoryId) {
+      productWhere.categoryId = categoryId;
+    }
+    
+    if (subCategoryIds.length > 0) {
+      productWhere.subCategoryId = { in: subCategoryIds };
+    }
+    
+    const productsInFilter = await prisma.product.findMany({
+      where: productWhere,
       select: { id: true }
     });
-    productIdsInSubCategory = productsInSubCategory.map(p => p.id);
-    console.log('📋 Product IDs in subcategory:', productIdsInSubCategory.length);
+    productIdsInFilter = productsInFilter.map(p => p.id);
+    console.log('📋 Product IDs in filter:', productIdsInFilter.length);
+    
+    if (productIdsInFilter.length === 0) {
+      console.log('⚠️ No products found in the specified category/subcategory');
+      return {
+        products: [],
+        count: 0,
+        note: 'No products found in the specified category/subcategory',
+      };
+    }
   }
 
-  // Now get top selling products, optionally filtered by those in the subcategory
+  // Now get top selling products, filtered by category/subcategory if specified
   const topSellingProducts = await prisma.sellItem.groupBy({
     by: ['productId'],
     where: {
@@ -1911,9 +1929,9 @@ const getTopSellingProducts = async (
           },
         },
       ],
-      // FIX: Add subcategory filter here if we have subcategory IDs
-      ...(subCategoryIds.length > 0 && {
-        productId: { in: productIdsInSubCategory }
+      // Apply category/subcategory filter if specified
+      ...((categoryId || subCategoryIds.length > 0) && {
+        productId: { in: productIdsInFilter }
       }),
     },
     _sum: {
@@ -1931,18 +1949,18 @@ const getTopSellingProducts = async (
     take: 20,
   });
 
-  console.log('📊 Top selling product IDs (filtered by subcategory):', topSellingProducts.map(item => item.productId));
+  console.log('📊 Top selling product IDs (filtered by category/subcategory):', topSellingProducts.map(item => item.productId));
 
-  // If no top selling products found in the subcategory, get random products from that subcategory
+  // If no top selling products found in the filter, get random products from that filter
   if (topSellingProducts.length === 0) {
-    console.log('⚠️ No top selling products found in subcategory, getting random products from subcategory');
+    console.log('⚠️ No top selling products found in filter, getting random products from filter');
     
-    // Get random products from the specified subcategory
+    // Get random products from the specified category/subcategory
     const randomProducts = await prisma.product.findMany({
       where: {
         isActive: true,
-        ...(subCategoryIds.length > 0 && { subCategoryId: { in: subCategoryIds } }),
         ...(categoryId && { categoryId }),
+        ...(subCategoryIds.length > 0 && { subCategoryId: { in: subCategoryIds } }),
       },
       take: 20,
       include: {
@@ -2043,7 +2061,7 @@ const getTopSellingProducts = async (
     return {
       products: formattedProducts,
       count: formattedProducts.length,
-      note: 'Random products from specified subcategory (no top sellers found)',
+      note: 'Random products from specified category/subcategory (no top sellers found)',
     };
   }
 
@@ -2056,7 +2074,7 @@ const getTopSellingProducts = async (
     isActive: true,
   };
 
-  // Add category filter if found
+  // Add category filter if found (though it should already be included from the sellItem filter)
   if (categoryId) {
     productWhereClause.categoryId = categoryId;
   }
