@@ -6,18 +6,11 @@ const prisma = require('./prisma');
 
 // Get StockCorrection by ID
 const getStockCorrectionById = async (id) => {
-  console.log('=== getStockCorrectionById START ===');
-  console.log('Looking for stock correction with ID:', id);
-  
   try {
     // Validate ID
     if (!id || typeof id !== 'string') {
-      console.error('Invalid ID provided:', id);
       throw new Error('Invalid stock correction ID');
     }
-    
-    console.log('Executing Prisma query...');
-    
     const stockCorrection = await prisma.stockCorrection.findUnique({
       where: { id },
       include: {
@@ -36,47 +29,29 @@ const getStockCorrectionById = async (id) => {
         },
       },
     });
-    
-    console.log('Query completed successfully');
-    
-    if (!stockCorrection) {
-      console.log('Stock correction not found with ID:', id);
-    } else {
-      console.log('Stock correction found:', {
-        id: stockCorrection.id,
-        reference: stockCorrection.reference,
-        reason: stockCorrection.reason,
-        status: stockCorrection.status,
-        itemsCount: stockCorrection.items?.length || 0,
-        store: stockCorrection.store?.name || 'No store',
-        shop: stockCorrection.shop?.name || 'No shop',
-      });
-    }
-    
-    console.log('=== getStockCorrectionById END ===');
-    
     return stockCorrection;
   } catch (error) {
-    console.error('=== getStockCorrectionById ERROR ===');
-    console.error('Error name:', error.name);
-    console.error('Error message:', error.message);
-    console.error('Error stack:', error.stack);
-    
     // Check if it's a Prisma error
     if (error.code) {
       console.error('Prisma error code:', error.code);
     }
-    
+
     // Check database connection
-    if (error.message.includes('connect') || error.message.includes('connection')) {
+    if (
+      error.message.includes('connect') ||
+      error.message.includes('connection')
+    ) {
       console.error('Database connection error');
     }
-    
+
     // Check for invalid ID format
-    if (error.message.includes('Invalid value') || error.message.includes('malformed')) {
+    if (
+      error.message.includes('Invalid value') ||
+      error.message.includes('malformed')
+    ) {
       console.error('Invalid ID format');
     }
-    
+
     throw error;
   }
 };
