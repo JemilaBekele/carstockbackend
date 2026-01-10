@@ -117,36 +117,20 @@ const getAllStockCorrections = async ({ startDate, endDate } = {}) => {
     // Log the Prisma query
     console.log('Executing Prisma query...');
 
+    // Only select the fields you want
     const stockCorrections = await prisma.stockCorrection.findMany({
       where: whereClause,
       orderBy: {
         createdAt: 'desc',
       },
       select: {
-        id: true,
-        createdAt: true,
-        updatedAt: true,
-        description: true,
-        // Explicitly select store WITHOUT any nested stock_corrections
-        store: {
-          select: {
-            id: true,
-            name: true,
-            // Don't include any relations that might have isChecked
-          },
-        },
-        storeId: true,
-        shop: {
-          select: {
-            id: true,
-            name: true,
-          },
-        },
-        shopId: true,
-        items: true,
-        _count: {
-          select: { items: true },
-        },
+        id: true,           // Keep for reference
+        reference: true,    // Reference
+        reason: true,       // Reason
+        status: true,       // Status
+        notes: true,        // Notes
+        createdAt: true,    // Created At
+        shortCode: true,    // Short Code
       },
     });
 
@@ -154,20 +138,17 @@ const getAllStockCorrections = async ({ startDate, endDate } = {}) => {
 
     // Log first item structure (for debugging)
     if (stockCorrections.length > 0) {
-      console.log('First item structure:');
-      console.log(
-        JSON.stringify(
-          {
-            id: stockCorrections[0].id,
-            createdAt: stockCorrections[0].createdAt,
-            store: stockCorrections[0].store ? 'present' : 'null',
-            shop: stockCorrections[0].shop ? 'present' : 'null',
-            itemsCount: stockCorrections[0]._count?.items,
-          },
-          null,
-          2,
-        ),
-      );
+      console.log('First item structure (simplified):');
+      const firstItem = stockCorrections[0];
+      console.log(`
+        ID: ${firstItem.id}
+        Reference: ${firstItem.reference || 'N/A'}
+        Reason: ${firstItem.reason || 'N/A'}
+        Status: ${firstItem.status || 'N/A'}
+        Notes: ${firstItem.notes || 'N/A'}
+        Created At: ${firstItem.createdAt || 'N/A'}
+        Short Code: ${firstItem.shortCode || 'N/A'}
+      `);
     }
 
     console.log('=== getAllStockCorrections SUCCESS ===');
@@ -188,10 +169,7 @@ const getAllStockCorrections = async ({ startDate, endDate } = {}) => {
     }
 
     // Check if it's a database connection error
-    if (
-      error.message.includes('connect') ||
-      error.message.includes('connection')
-    ) {
+    if (error.message.includes('connect') || error.message.includes('connection')) {
       console.error('Database connection error detected');
     }
 
