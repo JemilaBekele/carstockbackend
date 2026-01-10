@@ -42,7 +42,7 @@ router.get('/api/sells/:id/user/based', auth, sellController.getSellByIdByuser);
 router.get(
   '/api/sells',
   auth,
-  checkPermission('VIEW_ALL_SELLS'),
+  // checkPermission('VIEW_ALL_SELLS'),
   sellController.getSells,
 );
 
