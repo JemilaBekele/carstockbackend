@@ -6,25 +6,79 @@ const prisma = require('./prisma');
 
 // Get StockCorrection by ID
 const getStockCorrectionById = async (id) => {
-  const stockCorrection = await prisma.stockCorrection.findUnique({
-    where: { id },
-    include: {
-      store: true,
-      shop: true,
-      purchase: true,
-      transfer: true,
-      createdBy: true,
-      updatedBy: true,
-      items: {
-        include: {
-          product: true,
-          batch: true,
-          unitOfMeasure: true,
+  console.log('=== getStockCorrectionById START ===');
+  console.log('Looking for stock correction with ID:', id);
+  
+  try {
+    // Validate ID
+    if (!id || typeof id !== 'string') {
+      console.error('Invalid ID provided:', id);
+      throw new Error('Invalid stock correction ID');
+    }
+    
+    console.log('Executing Prisma query...');
+    
+    const stockCorrection = await prisma.stockCorrection.findUnique({
+      where: { id },
+      include: {
+        store: true,
+        shop: true,
+        purchase: true,
+        transfer: true,
+        createdBy: true,
+        updatedBy: true,
+        items: {
+          include: {
+            product: true,
+            batch: true,
+            unitOfMeasure: true,
+          },
         },
       },
-    },
-  });
-  return stockCorrection;
+    });
+    
+    console.log('Query completed successfully');
+    
+    if (!stockCorrection) {
+      console.log('Stock correction not found with ID:', id);
+    } else {
+      console.log('Stock correction found:', {
+        id: stockCorrection.id,
+        reference: stockCorrection.reference,
+        reason: stockCorrection.reason,
+        status: stockCorrection.status,
+        itemsCount: stockCorrection.items?.length || 0,
+        store: stockCorrection.store?.name || 'No store',
+        shop: stockCorrection.shop?.name || 'No shop',
+      });
+    }
+    
+    console.log('=== getStockCorrectionById END ===');
+    
+    return stockCorrection;
+  } catch (error) {
+    console.error('=== getStockCorrectionById ERROR ===');
+    console.error('Error name:', error.name);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+    
+    // Check if it's a Prisma error
+    if (error.code) {
+      console.error('Prisma error code:', error.code);
+    }
+    
+    // Check database connection
+    if (error.message.includes('connect') || error.message.includes('connection')) {
+      console.error('Database connection error');
+    }
+    
+    // Check for invalid ID format
+    if (error.message.includes('Invalid value') || error.message.includes('malformed')) {
+      console.error('Invalid ID format');
+    }
+    
+    throw error;
+  }
 };
 
 const getStockCorrectionsByPurchaseId = async (purchaseId) => {
@@ -63,119 +117,49 @@ const getStockCorrectionByReference = async (reference) => {
 
 // Get all StockCorrections
 const getAllStockCorrections = async ({ startDate, endDate } = {}) => {
-  console.log('=== getAllStockCorrections START ===');
-  console.log('Input parameters:', { startDate, endDate });
+  const whereClause = {};
+  const threeMonthsAgo = subMonths(new Date(), 12);
 
-  try {
-    const whereClause = {};
-    const threeMonthsAgo = subMonths(new Date(), 12); // Default time range
-    console.log('Default time range (12 months ago):', threeMonthsAgo);
+  // Convert and validate dates
+  const startDateObj = startDate ? new Date(startDate) : undefined;
+  const endDateObj = endDate ? new Date(endDate) : undefined;
 
-    // Convert string dates to Date objects if they exist
-    const startDateObj = startDate ? new Date(startDate) : undefined;
-    const endDateObj = endDate ? new Date(endDate) : undefined;
-    console.log('Parsed date objects:', { startDateObj, endDateObj });
-
-    // Validate dates
-    if (startDateObj && isNaN(startDateObj.getTime())) {
-      console.error('Invalid startDate:', startDate);
-      throw new Error('Invalid startDate format');
-    }
-    if (endDateObj && isNaN(endDateObj.getTime())) {
-      console.error('Invalid endDate:', endDate);
-      throw new Error('Invalid endDate format');
-    }
-
-    // Build the date filter
-    if (startDateObj && endDateObj) {
-      whereClause.createdAt = {
-        gte: startDateObj,
-        lte: endDateObj,
-      };
-      console.log('Date filter: Both start and end dates');
-    } else if (startDateObj) {
-      whereClause.createdAt = {
-        gte: startDateObj,
-        lte: new Date(),
-      };
-      console.log('Date filter: Start date only');
-    } else if (endDateObj) {
-      whereClause.createdAt = {
-        gte: threeMonthsAgo,
-        lte: endDateObj,
-      };
-      console.log('Date filter: End date only');
-    } else {
-      whereClause.createdAt = {
-        gte: threeMonthsAgo,
-      };
-      console.log('Date filter: Default (12 months)');
-    }
-
-    console.log('Final whereClause:', JSON.stringify(whereClause, null, 2));
-
-    // Log the Prisma query
-    console.log('Executing Prisma query...');
-
-    // Only select the fields you want
-    const stockCorrections = await prisma.stockCorrection.findMany({
-      where: whereClause,
-      orderBy: {
-        createdAt: 'desc',
-      },
-      select: {
-        id: true,           // Keep for reference
-        reference: true,    // Reference
-        reason: true,       // Reason
-        status: true,       // Status
-        notes: true,        // Notes
-        createdAt: true,    // Created At
-        shortCode: true,    // Short Code
-      },
-    });
-
-    console.log(`Fetched ${stockCorrections.length} stock corrections`);
-
-    // Log first item structure (for debugging)
-    if (stockCorrections.length > 0) {
-      console.log('First item structure (simplified):');
-      const firstItem = stockCorrections[0];
-      console.log(`
-        ID: ${firstItem.id}
-        Reference: ${firstItem.reference || 'N/A'}
-        Reason: ${firstItem.reason || 'N/A'}
-        Status: ${firstItem.status || 'N/A'}
-        Notes: ${firstItem.notes || 'N/A'}
-        Created At: ${firstItem.createdAt || 'N/A'}
-        Short Code: ${firstItem.shortCode || 'N/A'}
-      `);
-    }
-
-    console.log('=== getAllStockCorrections SUCCESS ===');
-
-    return {
-      stockCorrections,
-      count: stockCorrections.length,
-    };
-  } catch (error) {
-    console.error('=== getAllStockCorrections ERROR ===');
-    console.error('Error name:', error.name);
-    console.error('Error message:', error.message);
-    console.error('Error stack:', error.stack);
-
-    // Check if it's a Prisma error
-    if (error.code) {
-      console.error('Prisma error code:', error.code);
-    }
-
-    // Check if it's a database connection error
-    if (error.message.includes('connect') || error.message.includes('connection')) {
-      console.error('Database connection error detected');
-    }
-
-    // Re-throw the error so the API can handle it
-    throw error;
+  if (startDateObj && isNaN(startDateObj.getTime())) {
+    throw new Error('Invalid startDate format');
   }
+  if (endDateObj && isNaN(endDateObj.getTime())) {
+    throw new Error('Invalid endDate format');
+  }
+
+  // Date filtering logic
+  if (startDateObj && endDateObj) {
+    whereClause.createdAt = { gte: startDateObj, lte: endDateObj };
+  } else if (startDateObj) {
+    whereClause.createdAt = { gte: startDateObj, lte: new Date() };
+  } else if (endDateObj) {
+    whereClause.createdAt = { gte: threeMonthsAgo, lte: endDateObj };
+  } else {
+    whereClause.createdAt = { gte: threeMonthsAgo };
+  }
+
+  const stockCorrections = await prisma.stockCorrection.findMany({
+    where: whereClause,
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      reference: true,
+      reason: true,
+      status: true,
+      notes: true,
+      createdAt: true,
+      shortCode: true,
+    },
+  });
+
+  return {
+    stockCorrections,
+    count: stockCorrections.length,
+  };
 };
 const generateShortCode = async () => {
   try {
