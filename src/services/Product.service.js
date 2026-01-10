@@ -1557,18 +1557,79 @@ function isValidUUID(str) {
 
 const searchProducts = async (
   searchTerm,
-  categoryId = null,
-  subCategoryId = null,
+  categoryFilter = null,
+  subCategoryFilter = null,
 ) => {
+  let categoryId = null;
+  let subCategoryIds = []; // Changed to array to handle multiple subcategories with same name
+
+  // Handle category filter (could be ID or name)
+  if (categoryFilter) {
+    if (isValidUUID(categoryFilter)) {
+      // It's a UUID, use as ID
+      categoryId = categoryFilter;
+    } else {
+      // It's a name, look up the ID
+      const category = await prisma.category.findFirst({
+        where: { name: categoryFilter },
+        select: { id: true },
+      });
+      if (category) {
+        categoryId = category.id;
+      } else {
+        return {
+          products: [],
+          count: 0,
+          note: 'Category not found',
+        };
+      }
+    }
+  }
+
+  // Handle subcategory filter (could be ID or name)
+  if (subCategoryFilter) {
+    if (isValidUUID(subCategoryFilter)) {
+      // It's a UUID, use as ID
+      subCategoryIds = [subCategoryFilter];
+    } else {
+      // It's a name, look up ALL subcategories with this name
+      const subCategoryWhere = {
+        name: subCategoryFilter,
+      };
+
+      // Only filter by category if category is specified
+      if (categoryId) {
+        subCategoryWhere.categoryId = categoryId;
+      }
+
+      const subCategories = await prisma.subCategory.findMany({
+        where: subCategoryWhere,
+        select: { id: true },
+      });
+
+      if (subCategories.length > 0) {
+        subCategoryIds = subCategories.map((subCat) => subCat.id);
+      } else {
+        return {
+          products: [],
+          count: 0,
+          note: 'Subcategory not found',
+        };
+      }
+    }
+  }
+
   // Add debug logging to see what's being searched
   // First, get all products and filter manually for case-insensitive search
   const allProducts = await prisma.product.findMany({
     where: {
       isActive: true,
-      // Apply category filter if provided (only if it's a valid UUID)
-      ...(categoryId && isValidUUID(categoryId) && { categoryId }),
-      // Apply subcategory filter if provided (only if it's a valid UUID)
-      ...(subCategoryId && isValidUUID(subCategoryId) && { subCategoryId }),
+      // Apply category filter if provided
+      ...(categoryId && { categoryId }),
+      // Apply subcategory filter if provided - now can be multiple IDs
+      ...(subCategoryIds.length > 0 && {
+        subCategoryId: { in: subCategoryIds },
+      }),
     },
     include: {
       category: true,
@@ -1666,14 +1727,63 @@ const searchProducts = async (
 const getTopSellingProducts = async (
   userId = null,
   searchTerm = null,
-  categoryId = null,
-  subCategoryId = null,
+  categoryName = null,
+  subCategoryName = null,
 ) => {
-  // If search term is provided, use search functionality
+  let categoryId = null;
+  let subCategoryIds = []; // Changed to array for multiple matches
+
+  // If category name is provided, find the category ID
+  if (categoryName) {
+    const category = await prisma.category.findFirst({
+      where: {
+        name: categoryName,
+      },
+      select: { id: true },
+    });
+    if (category) {
+      categoryId = category.id;
+    } else {
+      // Category not found, return empty or handle as needed
+      return {
+        products: [],
+        count: 0,
+        note: 'Category not found',
+      };
+    }
+  }
+
+  // If subcategory name is provided, find ALL subcategory IDs with that name
+  if (subCategoryName) {
+    const subCategoryWhere = {
+      name: subCategoryName,
+    };
+
+    // Only filter by category if category is also specified
+    if (categoryId) {
+      subCategoryWhere.categoryId = categoryId;
+    }
+
+    const subCategories = await prisma.subCategory.findMany({
+      where: subCategoryWhere,
+      select: { id: true },
+    });
+
+    if (subCategories.length > 0) {
+      subCategoryIds = subCategories.map((subCat) => subCat.id);
+    } else {
+      // Subcategory not found, return empty or handle as needed
+      return {
+        products: [],
+        count: 0,
+        note: 'Subcategory not found',
+      };
+    }
+  }
+
   // If search term is provided, use search functionality
   if (searchTerm) {
-    // FIXED: Remove userId from searchProducts call since it's not used there
-    return searchProducts(searchTerm, categoryId, subCategoryId);
+    return searchProducts(searchTerm, categoryId, subCategoryName);
   }
 
   // Get user's accessible shops if userId is provided
@@ -1745,14 +1855,14 @@ const getTopSellingProducts = async (
     isActive: true,
   };
 
-  // Add category filter if provided
+  // Add category filter if found
   if (categoryId) {
     productWhereClause.categoryId = categoryId;
   }
 
-  // Add subcategory filter if provided
-  if (subCategoryId) {
-    productWhereClause.subCategoryId = subCategoryId;
+  // Add subcategory filter if found - now can be multiple IDs
+  if (subCategoryIds.length > 0) {
+    productWhereClause.subCategoryId = { in: subCategoryIds };
   }
 
   // Get products with their additional prices and shop availability
@@ -1801,7 +1911,7 @@ const getTopSellingProducts = async (
     },
   });
 
-  // Format the response... (EXACT SAME STRUCTURE AS getRandomProductsWithShopStocks)
+  // Format the response...
   const formattedProducts = productsWithDetails.map((product) => {
     // Filter additional prices based on user shop access
     const additionalPrices = product.AdditionalPrice.filter(
@@ -1809,7 +1919,6 @@ const getTopSellingProducts = async (
         !userId || // No user = show all
         (userAccessibleShopIds.length > 0 &&
           userAccessibleShopIds.includes(price.shopId)), // User with shops = only assigned shops
-      // If userAccessibleShopIds is empty, no additional prices will be shown
     ).map((price) => ({
       id: price.id,
       label: price.label,
@@ -1869,6 +1978,7 @@ const getTopSellingProducts = async (
     note: 'Top selling products with available shop stock',
   };
 };
+
 const getProductBatchesByShopsUser = async (productId, userId = null) => {
   // If userId is provided, get user's accessible shops first
   let userShopIds = [];

@@ -135,16 +135,18 @@ const getProducts = catchAsync(async (req, res) => {
   });
 });
 const getTopSellingProducts = catchAsync(async (req, res) => {
-  const { searchTerm, categoryId, subCategoryId } = req.query;
+  const { searchTerm, categoryName, subCategoryName } = req.query;
   const userId = req.user.id;
 
   // Convert empty strings to null and ensure proper parameter assignment
   const processedSearchTerm =
     searchTerm && searchTerm.trim() !== '' ? searchTerm.trim() : null;
-  const processedCategoryId =
-    categoryId && categoryId.trim() !== '' ? categoryId.trim() : null;
-  const processedSubCategoryId =
-    subCategoryId && subCategoryId.trim() !== '' ? subCategoryId.trim() : null;
+  const processedCategoryName =
+    categoryName && categoryName.trim() !== '' ? categoryName.trim() : null;
+  const processedSubCategoryName =
+    subCategoryName && subCategoryName.trim() !== ''
+      ? subCategoryName.trim()
+      : null;
 
   // DEBUG: Check if parameters are being mixed up
   if (processedSearchTerm && isValidUUID(processedSearchTerm)) {
@@ -153,11 +155,24 @@ const getTopSellingProducts = catchAsync(async (req, res) => {
     );
   }
 
+  // DEBUG: Check if category/subcategory names look like UUIDs
+  if (processedCategoryName && isValidUUID(processedCategoryName)) {
+    console.warn(
+      '⚠️ WARNING: categoryName looks like a UUID, did you mean to use the name?',
+    );
+  }
+
+  if (processedSubCategoryName && isValidUUID(processedSubCategoryName)) {
+    console.warn(
+      '⚠️ WARNING: subCategoryName looks like a UUID, did you mean to use the name?',
+    );
+  }
+
   const result = await productService.getTopSellingProducts(
     userId,
     processedSearchTerm, // This should be the text search
-    processedCategoryId, // This should be the category ID
-    processedSubCategoryId, // This should be the subcategory ID
+    processedCategoryName, // This should be the category name
+    processedSubCategoryName, // This should be the subcategory name
   );
 
   res.status(httpStatus.OK).send({

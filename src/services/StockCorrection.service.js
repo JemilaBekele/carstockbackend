@@ -967,13 +967,8 @@ const approveStockCorrection = async (stockCorrectionId, userId) => {
           }),
         );
       } else if (stockCorrection.shopId) {
-        console.log(
-          `Creating stock ledger for "${productName}" at shop: ${stockCorrection.shopId}`,
-        );
-
         // Generate unique invoice number with timestamp and index
         const now = new Date();
-        const timestamp = now.getTime(); // Unix timestamp
         const dateStr = now.toISOString().replace(/[-:]/g, '').split('.')[0]; // YYYYMMDDTHHMMSS format
         const uniqueInvoiceNo = `${
           stockCorrection.shortCode || 'SC'
