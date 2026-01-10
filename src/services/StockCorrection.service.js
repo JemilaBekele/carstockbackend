@@ -63,6 +63,7 @@ const getStockCorrectionByReference = async (reference) => {
 
 // Get all StockCorrections
 const getAllStockCorrections = async ({ startDate, endDate } = {}) => {
+  console.log('Fetching stock corrections with filters:');
   const whereClause = {};
   const threeMonthsAgo = subMonths(new Date(), 12); // Default time range
 
