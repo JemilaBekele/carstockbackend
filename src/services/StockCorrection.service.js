@@ -106,7 +106,7 @@ const getAllStockCorrections = async ({ startDate, endDate } = {}) => {
       },
     },
   });
-
+console.log(`Fetched ${stockCorrections} stock corrections`);
   return {
     stockCorrections,
     count: stockCorrections.length,
