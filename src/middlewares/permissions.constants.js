@@ -341,6 +341,10 @@ module.exports = {
       name: 'APPROVE_SELL_STOCK_CORRECTION',
       description: 'Approve sell stock corrections',
     },
+    MARK_AS_CHECKED: {
+      name: 'MARK_AS_CHECKED_SELL_STOCK_CORRECTION',
+      description: 'Mark sell stock corrections as checked',
+    },
     REJECT: {
       name: 'REJECT_SELL_STOCK_CORRECTION',
       description: 'Reject sell stock corrections',

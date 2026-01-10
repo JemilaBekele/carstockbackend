@@ -180,6 +180,7 @@ const getSellStockCorrectionsBySellId = async (sellId) => {
       sell: true,
       createdBy: true,
       updatedBy: true,
+
       items: {
         include: {
           product: true,
@@ -654,7 +655,9 @@ const approveSellStockCorrection = async (
         (adjustment, correctionItem) => {
           // Only include delivered items in the adjustment
           if (correctionItem.itemSaleStatus !== 'DELIVERED') {
-            console.log(`Skipping item ${correctionItem.id} - status: ${correctionItem.itemSaleStatus}`);
+            console.log(
+              `Skipping item ${correctionItem.id} - status: ${correctionItem.itemSaleStatus}`,
+            );
             return adjustment;
           }
 
@@ -673,15 +676,18 @@ const approveSellStockCorrection = async (
             productId: correctionItem.productId,
             quantity: correctionItem.quantity,
             unitPrice: correctionItem.unitPrice,
-            status: correctionItem.itemSaleStatus
+            status: correctionItem.itemSaleStatus,
           });
 
           // Calculate adjustment: quantity × unitPrice
           // Negative quantity = negative adjustment (customer pays less)
           // Positive quantity = positive adjustment (customer pays more)
-          const itemAdjustment = correctionItem.quantity * correctionItem.unitPrice;
-          console.log(`Item adjustment: ${correctionItem.quantity} × ${correctionItem.unitPrice} = ${itemAdjustment}`);
-          
+          const itemAdjustment =
+            correctionItem.quantity * correctionItem.unitPrice;
+          console.log(
+            `Item adjustment: ${correctionItem.quantity} × ${correctionItem.unitPrice} = ${itemAdjustment}`,
+          );
+
           return adjustment + itemAdjustment;
         },
         0,
@@ -696,7 +702,9 @@ const approveSellStockCorrection = async (
       async (item) => {
         // Only process delivered items
         if (item.itemSaleStatus !== 'DELIVERED') {
-          console.log(`Skipping stock update for item ${item.id} - status: ${item.itemSaleStatus}`);
+          console.log(
+            `Skipping stock update for item ${item.id} - status: ${item.itemSaleStatus}`,
+          );
           return [];
         }
 
@@ -889,7 +897,9 @@ const approveSellStockCorrection = async (
       // Ensure net total doesn't go negative
       const finalNetTotal = Math.max(0, newNetTotal);
 
-      console.log(`Updating sell NetTotal: ${sell.NetTotal} + ${netTotalAdjustment} = ${newNetTotal}`);
+      console.log(
+        `Updating sell NetTotal: ${sell.NetTotal} + ${netTotalAdjustment} = ${newNetTotal}`,
+      );
       console.log(`Final NetTotal: ${finalNetTotal}`);
 
       await tx.sell.update({
@@ -904,7 +914,7 @@ const approveSellStockCorrection = async (
       console.log('No net total update needed:', {
         hasSell: !!sell,
         netTotalAdjustment,
-        sellNetTotal: sell?.NetTotal
+        sellNetTotal: sell?.NetTotal,
       });
     }
 
@@ -1349,6 +1359,46 @@ const getSellByIdforsellcorrection = async (id) => {
     items: enhancedItems,
   };
 };
+const markAsCheckedSellStockCorrection = async (
+  sellStockCorrectionId,
+  userId,
+) => {
+  const sellStockCorrection = await getSellStockCorrectionById(
+    sellStockCorrectionId,
+  );
+
+  if (!sellStockCorrection) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Sell stock correction not found');
+  }
+
+  // Optional: Add validation based on your business logic
+  // For example, you might want to ensure it's only checked when in a specific status
+  if (sellStockCorrection.isChecked) {
+    throw new ApiError(
+      httpStatus.BAD_REQUEST,
+      'Sell stock correction is already checked',
+    );
+  }
+
+  const updatedSellStockCorrection = await prisma.sellStockCorrection.update({
+    where: { id: sellStockCorrectionId },
+    data: {
+      isChecked: true,
+    },
+  });
+
+  // Create log entry
+  await prisma.log.create({
+    data: {
+      action: `Marked sell stock correction ${
+        sellStockCorrection.reference || sellStockCorrection.id
+      } as checked`,
+      userId,
+    },
+  });
+
+  return updatedSellStockCorrection;
+};
 module.exports = {
   getSellStockCorrectionById,
   getSellStockCorrectionByReference,
@@ -1361,4 +1411,5 @@ module.exports = {
   rejectSellStockCorrection,
   getSellByIdforsellcorrection,
   getSellStockCorrectionfilterId,
+  markAsCheckedSellStockCorrection,
 };

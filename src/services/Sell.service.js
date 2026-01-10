@@ -241,6 +241,7 @@ const getAllSells = async ({
           id: true,
           status: true, // Only including status as requested
           createdAt: true,
+          isChecked: true, // Make sure this is included!
         },
       },
       _count: {
@@ -257,7 +258,6 @@ const getAllSells = async ({
 
 const generateInvoiceNumber = async () => {
   try {
-    console.log('🔢 [INVOICE] Generating invoice number...');
 
     // Get all invoice numbers
     const allSells = await prisma.sell.findMany({
@@ -269,7 +269,6 @@ const generateInvoiceNumber = async () => {
     if (allSells.length === 0) {
       // No invoices exist, start from 00001
       const invoiceNumber = 'INV-00001';
-      console.log('✅ [INVOICE] First invoice:', invoiceNumber);
       return invoiceNumber;
     }
 
@@ -286,27 +285,19 @@ const generateInvoiceNumber = async () => {
     }
 
     const nextNumber = maxNumber === 0 ? 1 : maxNumber + 1;
-    console.log(
-      '🔢 [INVOICE] Max number found:',
-      maxNumber,
-      'Next:',
-      nextNumber,
-    );
+   
 
     // Format: Always 5 digits
     const invoiceNumber = `INV-${nextNumber.toString().padStart(5, '0')}`;
-    console.log('✅ [INVOICE] Generated:', invoiceNumber);
 
     return invoiceNumber;
   } catch (error) {
-    console.error('❌ [INVOICE ERROR]:', error);
     return `INV-${Date.now().toString().slice(-8)}`;
   }
 };
 // Create Sell
 // Create Sell
 const createSell = async (sellBody, userId) => {
-  console.log(sellBody);
   const user = await prisma.user.findUnique({
     where: { id: userId },
     include: { branch: true },
@@ -1930,6 +1921,7 @@ const getAllSellsuser = async ({
             select: {
               id: true,
               status: true,
+              isChecked: true, // Make sure this is included!
             },
           },
           _count: {
@@ -1980,6 +1972,7 @@ const getAllSellsuser = async ({
             select: {
               id: true,
               status: true,
+              isChecked: true, // Make sure this is included!
             },
           },
           _count: {
@@ -2030,6 +2023,7 @@ const getAllSellsuser = async ({
             select: {
               id: true,
               status: true,
+              isChecked: true, // Make sure this is included!
             },
           },
           _count: {
@@ -2080,6 +2074,7 @@ const getAllSellsuser = async ({
             select: {
               id: true,
               status: true,
+              isChecked: true, // Make sure this is included!
             },
           },
           _count: {
@@ -2130,6 +2125,7 @@ const getAllSellsuser = async ({
             select: {
               id: true,
               status: true,
+              isChecked: true, // Make sure this is included!
             },
           },
           _count: {
@@ -2332,6 +2328,7 @@ const getAllSellsuser = async ({
           select: {
             id: true,
             status: true,
+            isChecked: true, // Make sure this is included!
           },
         },
         _count: {
@@ -2547,6 +2544,7 @@ const getAllSellsuserweb = async ({
           select: {
             id: true,
             status: true,
+            isChecked: true, // Make sure this is included!
           },
         },
         _count: {

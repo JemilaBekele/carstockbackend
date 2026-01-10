@@ -44,9 +44,6 @@ const getSellStockCorrectionsBySellId = catchAsync(async (req, res) => {
 });
 
 const getSellStockCorrectionfilterId = catchAsync(async (req, res) => {
-  console.log('sell id', req.params.sellId);
-  console.log('user id', req.user.id);
-
   const sellStockCorrections =
     await sellStockCorrectionService.getSellStockCorrectionfilterId(
       req.params.sellId,
@@ -130,7 +127,18 @@ const rejectSellStockCorrection = catchAsync(async (req, res) => {
     sellStockCorrection,
   });
 });
-
+const markAsCheckedSellStockCorrection = catchAsync(async (req, res) => {
+  const sellStockCorrection =
+    await sellStockCorrectionService.markAsCheckedSellStockCorrection(
+      req.params.id,
+      req.user.id,
+    );
+  res.status(httpStatus.OK).send({
+    success: true,
+    message: 'Sell stock correction marked as checked successfully',
+    sellStockCorrection,
+  });
+});
 // Delete Sell Stock Correction
 const deleteSellStockCorrection = catchAsync(async (req, res) => {
   await sellStockCorrectionService.deleteSellStockCorrection(req.params.id);
@@ -163,4 +171,5 @@ module.exports = {
   deleteSellStockCorrection,
   getSellByIdforsellcorrection,
   getSellStockCorrectionfilterId,
+  markAsCheckedSellStockCorrection,
 };

@@ -28,6 +28,12 @@ router.get(
   // checkPermission('VIEW_SELL_STOCK_CORRECTION'),
   sellStockCorrectionController.getSellStockCorrectionfilterId,
 );
+router.patch(
+  '/api/sells/:id/check/sellcorrection',
+  auth,
+  // checkPermission('UPDATE_SELL_STOCK_CORRECTION'), // Consider using an appropriate permission
+  sellStockCorrectionController.markAsCheckedSellStockCorrection,
+);
 router.get(
   '/api/sell-stock-corrections/:id',
   auth,
