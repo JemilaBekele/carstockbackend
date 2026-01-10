@@ -1775,7 +1775,7 @@ const getTopSellingProducts = async (
   subCategoryName = null,
 ) => {
   let categoryId = null;
-  let subCategoryIds = []; // Changed to array for multiple matches
+  let subCategoryIds = [];
 
   console.log('🏆 getTopSellingProducts called with:', {
     userId,
@@ -1879,8 +1879,24 @@ const getTopSellingProducts = async (
       }
     : {};
 
-  // Get top selling products by aggregating sell items
-  console.log('📈 Getting top selling products from sell items...');
+  // FIX: Get top selling products WITHIN the subcategory filter
+  console.log('📈 Getting top selling products from sell items WITH subcategory filter...');
+  
+  // First, get product IDs in the filtered subcategory
+  let productIdsInSubCategory = [];
+  if (subCategoryIds.length > 0) {
+    const productsInSubCategory = await prisma.product.findMany({
+      where: {
+        isActive: true,
+        subCategoryId: { in: subCategoryIds }
+      },
+      select: { id: true }
+    });
+    productIdsInSubCategory = productsInSubCategory.map(p => p.id);
+    console.log('📋 Product IDs in subcategory:', productIdsInSubCategory.length);
+  }
+
+  // Now get top selling products, optionally filtered by those in the subcategory
   const topSellingProducts = await prisma.sellItem.groupBy({
     by: ['productId'],
     where: {
@@ -1895,6 +1911,10 @@ const getTopSellingProducts = async (
           },
         },
       ],
+      // FIX: Add subcategory filter here if we have subcategory IDs
+      ...(subCategoryIds.length > 0 && {
+        productId: { in: productIdsInSubCategory }
+      }),
     },
     _sum: {
       quantity: true,
@@ -1911,18 +1931,126 @@ const getTopSellingProducts = async (
     take: 20,
   });
 
-  console.log('📊 Top selling product IDs:', topSellingProducts.map(item => item.productId));
+  console.log('📊 Top selling product IDs (filtered by subcategory):', topSellingProducts.map(item => item.productId));
 
-  // If no top selling products found, get random 20 products with shop stocks
+  // If no top selling products found in the subcategory, get random products from that subcategory
   if (topSellingProducts.length === 0) {
-    console.log('⚠️ No top selling products found, getting random products');
-    return getRandomProductsWithShopStocks(userId);
+    console.log('⚠️ No top selling products found in subcategory, getting random products from subcategory');
+    
+    // Get random products from the specified subcategory
+    const randomProducts = await prisma.product.findMany({
+      where: {
+        isActive: true,
+        ...(subCategoryIds.length > 0 && { subCategoryId: { in: subCategoryIds } }),
+        ...(categoryId && { categoryId }),
+      },
+      take: 20,
+      include: {
+        category: true,
+        subCategory: true,
+        unitOfMeasure: true,
+        AdditionalPrice: {
+          include: {
+            shop: {
+              include: {
+                branch: true,
+              },
+            },
+          },
+        },
+        batches: {
+          where: {
+            ShopStock: {
+              some: {
+                quantity: { gt: 0 },
+                ...shopFilterCondition,
+              },
+            },
+          },
+          select: {
+            ShopStock: {
+              where: {
+                quantity: { gt: 0 },
+                ...shopFilterCondition,
+              },
+              select: {
+                quantity: true,
+                shop: {
+                  include: {
+                    branch: true,
+                  },
+                },
+                unitOfMeasure: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    // Format the random products
+    const formattedProducts = randomProducts.map((product) => {
+      // Filter additional prices based on user shop access
+      const additionalPrices = product.AdditionalPrice.filter(
+        (price) =>
+          !userId || // No user = show all
+          (userAccessibleShopIds.length > 0 &&
+            userAccessibleShopIds.includes(price.shopId)), // User with shops = only assigned shops
+      ).map((price) => ({
+        id: price.id,
+        label: price.label,
+        price: price.price,
+        shopId: price.shopId,
+        shop: price.shop
+          ? {
+              id: price.shop.id,
+              name: price.shop.name,
+              branch: price.shop.branch
+                ? {
+                    id: price.shop.branch.id,
+                    name: price.shop.branch.name,
+                  }
+                : null,
+            }
+          : null,
+        createdAt: price.createdAt,
+        updatedAt: price.updatedAt,
+      }));
+
+      // Create the final product object
+      const finalProduct = {
+        id: product.id,
+        productCode: product.productCode,
+        name: product.name,
+        generic: product.generic,
+        description: product.description,
+        sellPrice: product.sellPrice,
+        imageUrl: product.imageUrl,
+        category: product.category,
+        subCategory: product.subCategory,
+        unitOfMeasure: product.unitOfMeasure,
+        isActive: product.isActive,
+        additionalPrices,
+        createdAt: product.createdAt,
+        updatedAt: product.updatedAt,
+      };
+
+      return {
+        product: finalProduct,
+      };
+    });
+
+    return {
+      products: formattedProducts,
+      count: formattedProducts.length,
+      note: 'Random products from specified subcategory (no top sellers found)',
+    };
   }
 
   // Get product IDs from top selling products
   const productIds = topSellingProducts.map((item) => item.productId);
 
-  // Build where clause for products with optional category/subcategory filters
+  // Build where clause for products
   const productWhereClause = {
     id: { in: productIds },
     isActive: true,
@@ -1931,11 +2059,6 @@ const getTopSellingProducts = async (
   // Add category filter if found
   if (categoryId) {
     productWhereClause.categoryId = categoryId;
-  }
-
-  // Add subcategory filter if found - now can be multiple IDs
-  if (subCategoryIds.length > 0) {
-    productWhereClause.subCategoryId = { in: subCategoryIds };
   }
 
   console.log('🎯 Product where clause:', productWhereClause);
