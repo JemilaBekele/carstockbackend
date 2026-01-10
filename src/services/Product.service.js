@@ -1563,20 +1563,30 @@ const searchProducts = async (
   let categoryId = null;
   let subCategoryIds = []; // Changed to array to handle multiple subcategories with same name
 
+  console.log('🔍 searchProducts called with:', {
+    searchTerm,
+    categoryFilter,
+    subCategoryFilter,
+  });
+
   // Handle category filter (could be ID or name)
   if (categoryFilter) {
     if (isValidUUID(categoryFilter)) {
       // It's a UUID, use as ID
       categoryId = categoryFilter;
+      console.log('📦 Using categoryFilter as UUID:', categoryId);
     } else {
       // It's a name, look up the ID
+      console.log('🔎 Looking up category by name:', categoryFilter);
       const category = await prisma.category.findFirst({
         where: { name: categoryFilter },
         select: { id: true },
       });
       if (category) {
         categoryId = category.id;
+        console.log('✅ Found category ID:', categoryId);
       } else {
+        console.log('❌ Category not found:', categoryFilter);
         return {
           products: [],
           count: 0,
@@ -1591,25 +1601,34 @@ const searchProducts = async (
     if (isValidUUID(subCategoryFilter)) {
       // It's a UUID, use as ID
       subCategoryIds = [subCategoryFilter];
+      console.log('📦 Using subCategoryFilter as UUID:', subCategoryIds);
     } else {
       // It's a name, look up ALL subcategories with this name
       const subCategoryWhere = {
         name: subCategoryFilter,
       };
 
+      console.log('🔎 Looking up subcategory by name:', subCategoryFilter);
+      console.log('📝 Current categoryId:', categoryId);
+
       // Only filter by category if category is specified
       if (categoryId) {
         subCategoryWhere.categoryId = categoryId;
+        console.log('➕ Added category filter to subcategory search');
       }
 
       const subCategories = await prisma.subCategory.findMany({
         where: subCategoryWhere,
-        select: { id: true },
+        select: { id: true, name: true, categoryId: true },
       });
+
+      console.log('📊 Found subcategories:', subCategories);
 
       if (subCategories.length > 0) {
         subCategoryIds = subCategories.map((subCat) => subCat.id);
+        console.log('✅ Subcategory IDs found:', subCategoryIds);
       } else {
+        console.log('❌ No subcategories found with name:', subCategoryFilter);
         return {
           products: [],
           count: 0,
@@ -1618,6 +1637,12 @@ const searchProducts = async (
       }
     }
   }
+
+  console.log('🎯 Final filters:', {
+    categoryId,
+    subCategoryIds,
+    subCategoryCount: subCategoryIds.length,
+  });
 
   // Add debug logging to see what's being searched
   // First, get all products and filter manually for case-insensitive search
@@ -1671,11 +1696,28 @@ const searchProducts = async (
     },
   });
 
+  console.log('📦 Total products fetched (before search term filter):', allProducts.length);
+  
+  // Log sample products to check their structure
+  if (allProducts.length > 0) {
+    console.log('📋 Sample product structure:', {
+      id: allProducts[0].id,
+      name: allProducts[0].name,
+      category: allProducts[0].category?.name,
+      subCategory: allProducts[0].subCategory?.name,
+      categoryId: allProducts[0].categoryId,
+      subCategoryId: allProducts[0].subCategoryId,
+    });
+  }
+
   // If no search term, return all filtered products
   if (!searchTerm) {
+    console.log('🔍 No search term provided, returning all filtered products');
     return processProductResults(allProducts);
   }
 
+  console.log('🔎 Applying search term:', searchTerm);
+  
   // Manual case-insensitive filtering with multiple field support
   const searchTermLower = searchTerm.toLowerCase().trim();
 
@@ -1721,6 +1763,8 @@ const searchProducts = async (
     return matches;
   });
 
+  console.log('✅ Products after search term filtering:', filteredProducts.length);
+  
   return processProductResults(filteredProducts);
 };
 
@@ -1733,8 +1777,16 @@ const getTopSellingProducts = async (
   let categoryId = null;
   let subCategoryIds = []; // Changed to array for multiple matches
 
+  console.log('🏆 getTopSellingProducts called with:', {
+    userId,
+    searchTerm,
+    categoryName,
+    subCategoryName,
+  });
+
   // If category name is provided, find the category ID
   if (categoryName) {
+    console.log('🔎 Looking up category by name:', categoryName);
     const category = await prisma.category.findFirst({
       where: {
         name: categoryName,
@@ -1743,8 +1795,9 @@ const getTopSellingProducts = async (
     });
     if (category) {
       categoryId = category.id;
+      console.log('✅ Found category ID:', categoryId);
     } else {
-      // Category not found, return empty or handle as needed
+      console.log('❌ Category not found:', categoryName);
       return {
         products: [],
         count: 0,
@@ -1759,20 +1812,27 @@ const getTopSellingProducts = async (
       name: subCategoryName,
     };
 
+    console.log('🔎 Looking up subcategory by name:', subCategoryName);
+    console.log('📝 Current categoryId:', categoryId);
+
     // Only filter by category if category is also specified
     if (categoryId) {
       subCategoryWhere.categoryId = categoryId;
+      console.log('➕ Added category filter to subcategory search');
     }
 
     const subCategories = await prisma.subCategory.findMany({
       where: subCategoryWhere,
-      select: { id: true },
+      select: { id: true, name: true, categoryId: true },
     });
+
+    console.log('📊 Found subcategories:', subCategories);
 
     if (subCategories.length > 0) {
       subCategoryIds = subCategories.map((subCat) => subCat.id);
+      console.log('✅ Subcategory IDs found:', subCategoryIds);
     } else {
-      // Subcategory not found, return empty or handle as needed
+      console.log('❌ No subcategories found with name:', subCategoryName);
       return {
         products: [],
         count: 0,
@@ -1781,14 +1841,22 @@ const getTopSellingProducts = async (
     }
   }
 
+  console.log('🎯 Final filters for top selling:', {
+    categoryId,
+    subCategoryIds,
+    subCategoryCount: subCategoryIds.length,
+  });
+
   // If search term is provided, use search functionality
   if (searchTerm) {
+    console.log('🔍 Search term provided, delegating to searchProducts');
     return searchProducts(searchTerm, categoryId, subCategoryName);
   }
 
   // Get user's accessible shops if userId is provided
   let userAccessibleShopIds = [];
   if (userId) {
+    console.log('👤 Getting accessible shops for user:', userId);
     const userWithShops = await prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -1798,6 +1866,7 @@ const getTopSellingProducts = async (
       },
     });
     userAccessibleShopIds = userWithShops?.shops.map((shop) => shop.id) || [];
+    console.log('🏪 User accessible shop IDs:', userAccessibleShopIds);
   }
 
   // Build the shop filter condition
@@ -1811,6 +1880,7 @@ const getTopSellingProducts = async (
     : {};
 
   // Get top selling products by aggregating sell items
+  console.log('📈 Getting top selling products from sell items...');
   const topSellingProducts = await prisma.sellItem.groupBy({
     by: ['productId'],
     where: {
@@ -1841,8 +1911,11 @@ const getTopSellingProducts = async (
     take: 20,
   });
 
+  console.log('📊 Top selling product IDs:', topSellingProducts.map(item => item.productId));
+
   // If no top selling products found, get random 20 products with shop stocks
   if (topSellingProducts.length === 0) {
+    console.log('⚠️ No top selling products found, getting random products');
     return getRandomProductsWithShopStocks(userId);
   }
 
@@ -1864,6 +1937,8 @@ const getTopSellingProducts = async (
   if (subCategoryIds.length > 0) {
     productWhereClause.subCategoryId = { in: subCategoryIds };
   }
+
+  console.log('🎯 Product where clause:', productWhereClause);
 
   // Get products with their additional prices and shop availability
   const productsWithDetails = await prisma.product.findMany({
@@ -1910,6 +1985,8 @@ const getTopSellingProducts = async (
       },
     },
   });
+
+  console.log('📦 Products with details found:', productsWithDetails.length);
 
   // Format the response...
   const formattedProducts = productsWithDetails.map((product) => {
@@ -1971,6 +2048,8 @@ const getTopSellingProducts = async (
         (a.salesData?.totalQuantitySold || 0),
     )
     .slice(0, 20);
+
+  console.log('✅ Final top products count:', topProducts.length);
 
   return {
     products: topProducts,
