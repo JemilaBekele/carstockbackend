@@ -615,7 +615,6 @@ model StockCorrection {
 
   shopId        String? @db.Char(36)
   shop          Shop?   @relation(fields: [shopId], references: [id])
-  isChecked Boolean  @default(false)
   // correction details
   reason           StockCorrectionReason
   status           StockCorrectionStatus @default(PENDING)
