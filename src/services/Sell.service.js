@@ -249,7 +249,7 @@ const getAllSells = async ({
       },
     },
   });
-console.log("Sells fetched:", sells.length);
+  console.log('Sells fetched:', sells.length);
   return {
     sells,
     count: sells.length,
@@ -258,7 +258,6 @@ console.log("Sells fetched:", sells.length);
 
 const generateInvoiceNumber = async () => {
   try {
-
     // Get all invoice numbers
     const allSells = await prisma.sell.findMany({
       select: { invoiceNo: true },
@@ -285,7 +284,6 @@ const generateInvoiceNumber = async () => {
     }
 
     const nextNumber = maxNumber === 0 ? 1 : maxNumber + 1;
-   
 
     // Format: Always 5 digits
     const invoiceNumber = `INV-${nextNumber.toString().padStart(5, '0')}`;
@@ -1843,7 +1841,7 @@ const getAllSellsuser = async ({
   endDate,
   userId,
   customerName,
-  status, // This parameter should actually be called saleStatus for clarity
+  status,
   page = 1,
   limit = 20,
 }) => {
@@ -1858,8 +1856,12 @@ const getAllSellsuser = async ({
   };
 
   // DETECT DEFAULT VIEW: Check if any filters are applied
+  const hasCustomerNameFilter = customerName && customerName.trim();
+  const hasStatusFilter = status && status.trim();
+  const hasDateFilter = startDate || endDate;
+
   const isDefaultView =
-    !status && !startDate && !endDate && !customerName && page === 1;
+    !hasStatusFilter && !hasDateFilter && !hasCustomerNameFilter && page === 1;
 
   // For default view: Show all NOT_APPROVED and PARTIALLY_DELIVERED, plus last 10 DELIVERED
   if (isDefaultView) {
@@ -1878,8 +1880,8 @@ const getAllSellsuser = async ({
       lastDeliveredSells,
       notApprovedSells,
       partiallyDeliveredSells,
-      approvedSells, // NEW: Get all APPROVED sales
-      cancelledSells, // NEW: Get all CANCELLED sales
+      approvedSells,
+      cancelledSells,
     ] = await Promise.all([
       // Get last 10 delivered sales
       prisma.sell.findMany({
@@ -1921,7 +1923,7 @@ const getAllSellsuser = async ({
             select: {
               id: true,
               status: true,
-              isChecked: true, // Make sure this is included!
+              isChecked: true,
             },
           },
           _count: {
@@ -1972,7 +1974,7 @@ const getAllSellsuser = async ({
             select: {
               id: true,
               status: true,
-              isChecked: true, // Make sure this is included!
+              isChecked: true,
             },
           },
           _count: {
@@ -2023,7 +2025,7 @@ const getAllSellsuser = async ({
             select: {
               id: true,
               status: true,
-              isChecked: true, // Make sure this is included!
+              isChecked: true,
             },
           },
           _count: {
@@ -2032,7 +2034,7 @@ const getAllSellsuser = async ({
         },
       }),
 
-      // NEW: Get all APPROVED sales
+      // Get all APPROVED sales
       prisma.sell.findMany({
         where: {
           createdById: userId,
@@ -2074,7 +2076,7 @@ const getAllSellsuser = async ({
             select: {
               id: true,
               status: true,
-              isChecked: true, // Make sure this is included!
+              isChecked: true,
             },
           },
           _count: {
@@ -2083,7 +2085,7 @@ const getAllSellsuser = async ({
         },
       }),
 
-      // NEW: Get all CANCELLED sales
+      // Get all CANCELLED sales
       prisma.sell.findMany({
         where: {
           createdById: userId,
@@ -2125,7 +2127,7 @@ const getAllSellsuser = async ({
             select: {
               id: true,
               status: true,
-              isChecked: true, // Make sure this is included!
+              isChecked: true,
             },
           },
           _count: {
@@ -2135,24 +2137,27 @@ const getAllSellsuser = async ({
       }),
     ]);
 
-    // Combine all results - NOW INCLUDES ALL STATUSES
+    // Combine all results
     const allSells = [
       ...notApprovedSells,
       ...partiallyDeliveredSells,
-      ...approvedSells, // Added
-      ...cancelledSells, // Added
-      ...lastDeliveredSells, // Last 10 delivered only
+      ...approvedSells,
+      ...cancelledSells,
+      ...lastDeliveredSells,
     ];
 
     // Sort by createdAt descending
     allSells.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
+    // Apply the limit for default view
+    const limitedSells = allSells.slice(0, limit);
+
     // Get counts for each status
     const [
       notApprovedCount,
       partiallyDeliveredCount,
-      approvedCount, // NEW
-      cancelledCount, // NEW
+      approvedCount,
+      cancelledCount,
       deliveredCount,
     ] = await Promise.all([
       prisma.sell.count({
@@ -2168,14 +2173,12 @@ const getAllSellsuser = async ({
         },
       }),
       prisma.sell.count({
-        // NEW
         where: {
           createdById: userId,
           saleStatus: 'APPROVED',
         },
       }),
       prisma.sell.count({
-        // NEW
         where: {
           createdById: userId,
           saleStatus: 'CANCELLED',
@@ -2190,15 +2193,15 @@ const getAllSellsuser = async ({
     ]);
 
     return {
-      sells: allSells,
-      count: allSells.length,
+      sells: limitedSells,
+      count: limitedSells.length,
       totalCount:
         notApprovedCount +
         partiallyDeliveredCount +
         approvedCount +
         cancelledCount +
         deliveredCount,
-      isDefaultView: true, // Flag to indicate this is default view
+      isDefaultView: true,
       statusCounts: {
         NOT_APPROVED: notApprovedCount,
         PARTIALLY_DELIVERED: partiallyDeliveredCount,
@@ -2209,30 +2212,37 @@ const getAllSellsuser = async ({
     };
   }
 
-  // REGULAR FILTERING LOGIC (when user applies any filter)
+  // REGULAR FILTERING LOGIC - NO LIMIT when filtering/searching
 
-  // Fix: Use saleStatus instead of status
+  // Handle status filtering
   if (status) {
-    // Handle multiple statuses (comma-separated) or single status
     if (status.includes(',')) {
       const statuses = status
         .split(',')
         .map((s) => s.trim())
         .filter((s) => s);
       if (statuses.length > 0) {
-        // Fix: Use saleStatus field name
         whereClause.saleStatus = { in: statuses };
       }
     } else {
-      // Fix: Use saleStatus field name
       whereClause.saleStatus = status;
     }
+  }
+
+  // Handle customer name filtering
+  if (customerName && customerName.trim()) {
+    const customerNameLower = customerName.trim().toLowerCase();
+    whereClause.customer = {
+      name: {
+        contains: customerNameLower,
+        mode: 'insensitive',
+      },
+    };
   }
 
   // Handle date filtering
   try {
     if (startDate && endDate) {
-      // Both dates provided
       const startOfRange = new Date(startDate);
       const endOfRange = new Date(endDate);
 
@@ -2243,7 +2253,6 @@ const getAllSellsuser = async ({
         throw new Error('Invalid date format');
       }
 
-      // Set start to beginning of day, end to end of day
       startOfRange.setHours(0, 0, 0, 0);
       endOfRange.setHours(23, 59, 59, 999);
 
@@ -2252,7 +2261,6 @@ const getAllSellsuser = async ({
         lte: endOfRange,
       };
     } else if (startDate && !endDate) {
-      // Only start date provided
       const startOfRange = new Date(startDate);
       if (Number.isNaN(startOfRange.getTime())) {
         throw new Error('Invalid start date format');
@@ -2260,7 +2268,6 @@ const getAllSellsuser = async ({
       startOfRange.setHours(0, 0, 0, 0);
       whereClause.createdAt = { gte: startOfRange };
     } else if (endDate && !startDate) {
-      // Only end date provided
       const endOfRange = new Date(endDate);
       if (Number.isNaN(endOfRange.getTime())) {
         throw new Error('Invalid end date format');
@@ -2274,90 +2281,70 @@ const getAllSellsuser = async ({
         lte: endOfRange,
       };
     } else {
-      // No dates provided, default to last 12 months
-      const twelveMonthsAgo = new Date();
-      twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 12);
-      whereClause.createdAt = { gte: twelveMonthsAgo };
+      // When filtering without dates, show all records (no date limit)
+      // Remove this else block to show all records regardless of date when filtering
+      // If you want to keep some date limit for performance, you can adjust this
     }
   } catch (error) {
     throw new Error(`Invalid date: ${error.message}`);
   }
 
-  // Calculate pagination
-  const skip = (page - 1) * limit;
-
-  // Execute the query with pagination
-  const [sells, totalCount] = await Promise.all([
-    prisma.sell.findMany({
-      where: whereClause,
-      orderBy: { createdAt: 'desc' },
-      skip,
-      take: limit,
-      include: {
-        branch: true,
-        customer: true,
-        createdBy: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-          },
+  // Execute the query WITHOUT pagination when filtering
+  const sells = await prisma.sell.findMany({
+    where: whereClause,
+    orderBy: { createdAt: 'desc' },
+    include: {
+      branch: true,
+      customer: true,
+      createdBy: {
+        select: {
+          id: true,
+          name: true,
+          email: true,
         },
-        items: {
-          include: {
-            product: {
-              include: {
-                unitOfMeasure: true,
-                category: true,
-              },
+      },
+      items: {
+        include: {
+          product: {
+            include: {
+              unitOfMeasure: true,
+              category: true,
             },
-            shop: true,
-            unitOfMeasure: true,
-            batches: {
-              include: {
-                batch: {
-                  include: {
-                    product: true,
-                  },
+          },
+          shop: true,
+          unitOfMeasure: true,
+          batches: {
+            include: {
+              batch: {
+                include: {
+                  product: true,
                 },
               },
             },
           },
         },
-        SellStockCorrection: {
-          select: {
-            id: true,
-            status: true,
-            isChecked: true, // Make sure this is included!
-          },
-        },
-        _count: {
-          select: { items: true },
+      },
+      SellStockCorrection: {
+        select: {
+          id: true,
+          status: true,
+          isChecked: true,
         },
       },
-    }),
-    prisma.sell.count({
-      where: whereClause,
-    }),
-  ]);
+      _count: {
+        select: { items: true },
+      },
+    },
+  });
 
-  // Apply customer name filtering in memory if needed
-  let filteredSells = sells;
-  if (customerName && customerName.trim()) {
-    const customerNameLower = customerName.trim().toLowerCase();
-    filteredSells = sells.filter(
-      (sell) =>
-        sell.customer &&
-        sell.customer.name &&
-        sell.customer.name.toLowerCase().includes(customerNameLower),
-    );
-  }
+  const totalCount = sells.length;
 
   return {
-    sells: filteredSells,
-    count: filteredSells.length,
+    sells, // NO LIMIT applied when filtering
+    count: sells.length,
     totalCount,
-    isDefaultView: false, // Flag to indicate this is filtered view
+    isDefaultView: false,
+    // Note: When filtering, pagination metadata doesn't apply since we return all results
   };
 };
 const getAllSellsuserweb = async ({
@@ -2367,7 +2354,7 @@ const getAllSellsuserweb = async ({
   customerName,
   status, // This parameter should actually be called saleStatus for clarity
   page = 1,
-  limit = 20,
+  limit = 2000,
 }) => {
   // Validate required parameters
   if (!userId) {
