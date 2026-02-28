@@ -23,7 +23,6 @@ const getShopByName = async (name) => {
 
 const getAllshop = async () => {
   const shops = await prisma.shop.findMany();
-console.log("shop",shops)
   return {
     shops,
     count: shops.length,
@@ -385,6 +384,7 @@ const getAvailableBatchesByProductAndShop = async (productId, shopId) => {
     throw error;
   }
 };
+
 module.exports = {
   getShopById,
   getAllshop,

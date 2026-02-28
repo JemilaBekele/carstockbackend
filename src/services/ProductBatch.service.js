@@ -488,7 +488,131 @@ const getProductInfoByBatchId = async (batchId) => {
 
   return { id: batch.product.id, name: batch.product.name };
 };
+const addOrUpdateShopStock = async (shopId, batchId, quantity) => {
+  try {
+    // Validate required fields
+    if (!shopId || !batchId || quantity === undefined) {
+      throw new Error('shopId, batchId, and quantity are required');
+    }
 
+    // Check if the batch exists and get the product with its unit of measure
+    const batch = await prisma.productBatch.findUnique({
+      where: { id: batchId },
+      include: {
+        product: {
+          include: {
+            unitOfMeasure: true, // Get unit of measure from product
+          },
+        },
+      },
+    });
+
+    if (!batch) {
+      throw new Error(`Batch with ID ${batchId} not found`);
+    }
+
+    // Get unitOfMeasureId from the product (since batch doesn't have it directly)
+    const { unitOfMeasureId } = batch.product;
+
+    if (!unitOfMeasureId) {
+      throw new Error(
+        `Product associated with batch ${batchId} does not have a unit of measure`,
+      );
+    }
+
+    // For negative quantities, check if we have enough stock
+    if (quantity < 0) {
+      const currentStock = await prisma.shopStock.findUnique({
+        where: {
+          shopId_batchId: {
+            shopId,
+            batchId,
+          },
+        },
+        select: { quantity: true },
+      });
+
+      if (!currentStock) {
+        throw new Error('Cannot decrease stock: Shop stock not found');
+      }
+
+      if (currentStock.quantity + quantity < 0) {
+        throw new Error('Insufficient stock in shop');
+      }
+
+      // Update existing stock
+      const result = await prisma.shopStock.update({
+        where: {
+          shopId_batchId: {
+            shopId,
+            batchId,
+          },
+        },
+        data: {
+          quantity: {
+            decrement: Math.abs(quantity),
+          },
+          updatedAt: new Date(),
+        },
+        include: {
+          batch: {
+            include: {
+              product: {
+                include: {
+                  unitOfMeasure: true,
+                },
+              },
+            },
+          },
+          shop: true,
+          unitOfMeasure: true, // Include unitOfMeasure in the result
+        },
+      });
+
+      return result;
+    }
+
+    // For positive or zero quantities, use upsert
+    const result = await prisma.shopStock.upsert({
+      where: {
+        shopId_batchId: {
+          shopId,
+          batchId,
+        },
+      },
+      update: {
+        quantity: {
+          increment: quantity,
+        },
+        updatedAt: new Date(),
+      },
+      create: {
+        shopId,
+        batchId,
+        quantity,
+        unitOfMeasureId, // Use the unitOfMeasureId from the product
+      },
+      include: {
+        batch: {
+          include: {
+            product: {
+              include: {
+                unitOfMeasure: true,
+              },
+            },
+          },
+        },
+        shop: true,
+        unitOfMeasure: true, // Include unitOfMeasure in the result
+      },
+    });
+
+    return result;
+  } catch (error) {
+    console.error('Error in addOrUpdateShopStock:', error);
+    throw error;
+  }
+};
 module.exports = {
   getProductBatchById,
   getAllProductBatches,
@@ -499,4 +623,5 @@ module.exports = {
   getProductByShopStock,
   getProductInfoByBatchId,
   getProductBatches,
+  addOrUpdateShopStock,
 };

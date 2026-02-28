@@ -55,7 +55,12 @@ router.put(
   // checkPermission('UPDATE_PRODUCT_BATCH'),
   productBatchController.updateProductBatch,
 );
-
+router.put(
+  '/api/update/shops/:shopId/batches/:batchId/stock',
+  auth,
+  // checkPermission('UPDATE_SHOP_STOCK'),
+  productBatchController.addOrUpdateShopStockController,
+);
 // Delete a product batch
 router.delete(
   '/api/product-batches/:id',
