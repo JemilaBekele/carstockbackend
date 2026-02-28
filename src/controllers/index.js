@@ -26,3 +26,4 @@ module.exports.GeneralDashboardController = require('./GeneralDashboard.controll
 module.exports.cartController = require('./Cart.controller');
 
 module.exports.yearEndResetController = require('./yearEndReset.controller');
+module.exports.stockLedgerReconciliationController = require('./MissingStockLedger.controller');

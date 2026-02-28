@@ -548,9 +548,24 @@ const approveSellStockCorrection = async (
   userId,
   deliveredItemIds = [],
 ) => {
+  console.log('=== Starting approveSellStockCorrection ===');
+  console.log('Input params:', {
+    sellStockCorrectionId,
+    userId,
+    deliveredItemIds,
+  });
+
   const sellStockCorrection = await getSellStockCorrectionById(
     sellStockCorrectionId,
   );
+
+  console.log('Retrieved sellStockCorrection:', {
+    id: sellStockCorrection?.id,
+    status: sellStockCorrection?.status,
+    sellId: sellStockCorrection?.sellId,
+    reference: sellStockCorrection?.reference,
+    notes: sellStockCorrection?.notes,
+  });
 
   if (!sellStockCorrection) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Sell stock correction not found');
@@ -566,7 +581,9 @@ const approveSellStockCorrection = async (
   const result = await prisma.$transaction(async (tx) => {
     // First, update the itemSaleStatus for the delivered items
     if (deliveredItemIds.length > 0) {
-      await tx.sellStockCorrectionItem.updateMany({
+      console.log('Updating delivered items:', deliveredItemIds);
+
+      const updateResult = await tx.sellStockCorrectionItem.updateMany({
         where: {
           id: { in: deliveredItemIds },
           correctionId: sellStockCorrectionId,
@@ -576,6 +593,8 @@ const approveSellStockCorrection = async (
           updatedAt: new Date(),
         },
       });
+
+      console.log('Update result:', updateResult);
     }
 
     // Fetch updated sell stock correction with items
@@ -591,6 +610,25 @@ const approveSellStockCorrection = async (
       },
     });
 
+    console.log('Updated sellStockCorrection with items:', {
+      id: updatedSellStockCorrection?.id,
+      status: updatedSellStockCorrection?.status,
+      itemsCount: updatedSellStockCorrection?.items?.length,
+      items: updatedSellStockCorrection?.items?.map((item) => ({
+        id: item.id,
+        productId: item.productId,
+        quantity: item.quantity,
+        unitPrice: item.unitPrice,
+        unitOfMeasureId: item.unitOfMeasureId,
+        itemSaleStatus: item.itemSaleStatus,
+        shopId: item.shopId,
+        batches: item.batches?.map((b) => ({
+          batchId: b.batchId,
+          quantity: b.quantity,
+        })),
+      })),
+    });
+
     if (!updatedSellStockCorrection) {
       throw new ApiError(
         httpStatus.NOT_FOUND,
@@ -604,12 +642,22 @@ const approveSellStockCorrection = async (
       (item) => item.itemSaleStatus === 'DELIVERED',
     ).length;
 
+    console.log('Status calculation:', {
+      allItemsCount,
+      deliveredItemsCount,
+      itemsStatuses: updatedSellStockCorrection.items.map(
+        (i) => i.itemSaleStatus,
+      ),
+    });
+
     let finalStatus = 'APPROVED';
     if (deliveredItemsCount === 0) {
       finalStatus = 'PENDING';
     } else if (deliveredItemsCount > 0 && deliveredItemsCount < allItemsCount) {
       finalStatus = 'PARTIAL';
     }
+
+    console.log('Final status determined:', finalStatus);
 
     // Get unit of measures
     const unitOfMeasureIds = updatedSellStockCorrection.items
@@ -625,11 +673,18 @@ const approveSellStockCorrection = async (
       return acc;
     }, {});
 
+    console.log('Unit of measure map:', Object.keys(unitOfMeasureMap));
+
     // Get the associated sell with its items to calculate net total
     let sell = null;
     let netTotalAdjustment = 0;
 
     if (updatedSellStockCorrection.sellId) {
+      console.log(
+        'Fetching associated sell:',
+        updatedSellStockCorrection.sellId,
+      );
+
       sell = await tx.sell.findUnique({
         where: { id: updatedSellStockCorrection.sellId },
         include: {
@@ -646,11 +701,19 @@ const approveSellStockCorrection = async (
         },
       });
 
+      console.log('Retrieved sell:', {
+        id: sell?.id,
+        NetTotal: sell?.NetTotal,
+        itemsCount: sell?.items?.length,
+      });
+
       if (!sell) {
         throw new ApiError(httpStatus.NOT_FOUND, 'Associated sell not found');
       }
 
       // Calculate net total adjustment based on DELIVERED stock correction items only
+      console.log('Calculating net total adjustment for delivered items:');
+
       netTotalAdjustment = updatedSellStockCorrection.items.reduce(
         (adjustment, correctionItem) => {
           // Only include delivered items in the adjustment
@@ -677,6 +740,8 @@ const approveSellStockCorrection = async (
             quantity: correctionItem.quantity,
             unitPrice: correctionItem.unitPrice,
             status: correctionItem.itemSaleStatus,
+            isAddition: correctionItem.quantity < 0,
+            isRemoval: correctionItem.quantity > 0,
           });
 
           // Calculate adjustment: quantity × unitPrice
@@ -695,9 +760,12 @@ const approveSellStockCorrection = async (
 
       console.log('Final netTotalAdjustment:', netTotalAdjustment);
       console.log('Original sell NetTotal:', sell.NetTotal);
+      console.log('New NetTotal would be:', sell.NetTotal + netTotalAdjustment);
     }
 
     // Prepare all operations for each DELIVERED sell stock correction item
+    console.log('Preparing stock operations for delivered items:');
+
     const operationsPromises = updatedSellStockCorrection.items.map(
       async (item) => {
         // Only process delivered items
@@ -717,48 +785,92 @@ const approveSellStockCorrection = async (
           );
         }
 
+        const itemOperations = [];
+
+        // Define variables for clarity
         const quantityToUse = item.quantity;
-        const isAddition = quantityToUse > 0;
-        const movementType = isAddition ? 'OUT' : 'IN';
+        const isAddition = quantityToUse < 0; // Negative quantity = add to stock
+        const isRemoval = quantityToUse > 0; // Positive quantity = remove from stock
+        const movementType = isAddition ? 'IN' : 'OUT'; // IN for additions, OUT for removals
         const absoluteQuantity = Math.abs(quantityToUse);
         const notes = isAddition
-          ? `Sell stock subtraction: ${
+          ? `Sell stock addition: ${
               updatedSellStockCorrection.notes || 'correction'
             }`
-          : `Sell stock addition: ${
+          : `Sell stock subtraction: ${
               updatedSellStockCorrection.notes || 'correction'
             }`;
 
-        const itemOperations = [];
+        console.log(`Processing item ${item.id}:`, {
+          quantityToUse,
+          isAddition,
+          isRemoval,
+          movementType,
+          absoluteQuantity,
+          notes,
+          hasBatches: item.batches && item.batches.length > 0,
+          shopId: item.shopId,
+        });
 
         // Handle batch-level stock updates if batches are specified
+        // Handle batch-level stock updates if batches are specified
         if (item.batches && item.batches.length > 0) {
-          // Check stock availability before processing
-          for (const correctionBatch of item.batches) {
-            const batchQuantity = correctionBatch.quantity;
-            const { batchId } = correctionBatch;
+          console.log(
+            `Item ${item.id} has ${item.batches.length} batches:`,
+            item.batches.map((b) => ({
+              batchId: b.batchId,
+              quantity: b.quantity,
+            })),
+          );
 
-            if (item.shopId) {
-              // Check current stock for this batch
-              const currentStock = await tx.shopStock.findUnique({
-                where: {
-                  shopId_batchId: {
-                    shopId: item.shopId,
-                    batchId,
+          // Check stock availability before processing (only for removals)
+          if (isRemoval) {
+            console.log(
+              `Checking stock availability for removal of ${absoluteQuantity} units`,
+            );
+
+            for (const correctionBatch of item.batches) {
+              const batchQuantity = Math.abs(correctionBatch.quantity);
+              const { batchId } = correctionBatch;
+
+              if (item.shopId) {
+                // Check current stock for this batch
+                const currentStock = await tx.shopStock.findUnique({
+                  where: {
+                    shopId_batchId: {
+                      shopId: item.shopId,
+                      batchId,
+                    },
                   },
-                },
-              });
+                });
 
-              // For subtractions (OUT movement), check if enough stock exists
-              if (isAddition) {
-                // isAddition means positive quantity (OUT movement)
-                if (currentStock && currentStock.quantity < batchQuantity) {
+                console.log(
+                  `Batch ${batchId} current stock:`,
+                  currentStock?.quantity || 0,
+                );
+
+                if (!currentStock || currentStock.quantity < batchQuantity) {
                   throw new ApiError(
                     httpStatus.BAD_REQUEST,
-                    `Insufficient stock for batch ${batchId}. Available: ${currentStock.quantity}, Required: ${batchQuantity}`,
+                    `Insufficient stock for batch ${batchId}. Available: ${
+                      currentStock?.quantity || 0
+                    }, Required: ${batchQuantity}`,
                   );
                 }
               }
+            }
+          }
+
+          // Process each batch (ONCE, using absolute values)
+          for (const correctionBatch of item.batches) {
+            const batchQuantity = Math.abs(correctionBatch.quantity); // ALWAYS use absolute value
+            const { batchId } = correctionBatch;
+
+            if (item.shopId) {
+              console.log(`Creating batch operations for batch ${batchId}:`, {
+                action: isAddition ? 'increment' : 'decrement',
+                quantity: batchQuantity, // Using absolute value
+              });
 
               itemOperations.push(
                 tx.shopStock.upsert({
@@ -770,13 +882,13 @@ const approveSellStockCorrection = async (
                   },
                   update: {
                     quantity: isAddition
-                      ? { decrement: batchQuantity }
-                      : { increment: batchQuantity },
+                      ? { increment: batchQuantity } // Add to stock
+                      : { decrement: batchQuantity }, // Remove from stock
                   },
                   create: {
                     shopId: item.shopId,
                     batchId,
-                    quantity: isAddition ? -batchQuantity : batchQuantity,
+                    quantity: isAddition ? batchQuantity : -batchQuantity,
                     unitOfMeasureId: item.unitOfMeasureId,
                     status: 'Available',
                   },
@@ -790,7 +902,7 @@ const approveSellStockCorrection = async (
                     batchId,
                     shopId: item.shopId,
                     movementType,
-                    quantity: batchQuantity,
+                    quantity: batchQuantity, // Using absolute value for ledger
                     unitOfMeasureId: item.unitOfMeasureId,
                     reference:
                       updatedSellStockCorrection.reference ||
@@ -803,80 +915,11 @@ const approveSellStockCorrection = async (
               );
             }
           }
-        } else if (item.shopId) {
-          // Check product-level stock availability
-          const currentStocks = await tx.shopStock.findMany({
-            where: {
-              shopId: item.shopId,
-              batch: {
-                productId: item.productId,
-              },
-            },
-            include: {
-              batch: true,
-            },
-          });
-
-          const totalAvailableStock = currentStocks.reduce(
-            (sum, stock) => sum + stock.quantity,
-            0,
-          );
-
-          // For subtractions (OUT movement), check if enough stock exists
-          if (isAddition) {
-            // isAddition means positive quantity (OUT movement)
-            if (totalAvailableStock < absoluteQuantity) {
-              throw new ApiError(
-                httpStatus.BAD_REQUEST,
-                `Insufficient stock for product. Available: ${totalAvailableStock}, Required: ${absoluteQuantity}`,
-              );
-            }
-          }
-
-          // Fallback to product-level stock update if no batches specified and shopId exists
-          itemOperations.push(
-            tx.shopStock.upsert({
-              where: {
-                shopId_batchId: {
-                  shopId: item.shopId,
-                  batchId: 'no-batch',
-                },
-              },
-              update: {
-                quantity: isAddition
-                  ? { decrement: absoluteQuantity }
-                  : { increment: absoluteQuantity },
-              },
-              create: {
-                shopId: item.shopId,
-                batchId: 'no-batch',
-                quantity: isAddition ? -absoluteQuantity : absoluteQuantity,
-                unitOfMeasureId: item.unitOfMeasureId,
-                status: 'Available',
-              },
-            }),
-          );
-
-          // Create stock ledger entry for shop
-          itemOperations.push(
-            tx.stockLedger.create({
-              data: {
-                batchId: null,
-                shopId: item.shopId,
-                movementType,
-                quantity: absoluteQuantity,
-                unitOfMeasureId: item.unitOfMeasureId,
-                reference:
-                  updatedSellStockCorrection.reference ||
-                  `SELL-CORRECTION-${updatedSellStockCorrection.id}`,
-                userId,
-                notes,
-                movementDate: new Date(),
-              },
-            }),
-          );
         }
 
+        console.log(
+          `Item ${item.id} generated ${itemOperations.length} operations`,
+        );
         return itemOperations;
       },
     );
@@ -885,9 +928,15 @@ const approveSellStockCorrection = async (
     const operationsArrays = await Promise.all(operationsPromises);
     const allOperations = operationsArrays.flat();
 
+    console.log(`Total operations to execute: ${allOperations.length}`);
+
     // Execute all operations
     if (allOperations.length > 0) {
+      console.log('Executing all operations...');
       await Promise.all(allOperations);
+      console.log('All operations completed successfully');
+    } else {
+      console.log('No operations to execute');
     }
 
     // Update sell's net total if there's an associated sell and netTotalAdjustment is not zero
@@ -910,6 +959,8 @@ const approveSellStockCorrection = async (
           updatedAt: new Date(),
         },
       });
+
+      console.log('Sell NetTotal updated successfully');
     } else {
       console.log('No net total update needed:', {
         hasSell: !!sell,
@@ -919,6 +970,8 @@ const approveSellStockCorrection = async (
     }
 
     // Update sell stock correction status based on delivery status
+    console.log(`Updating sell stock correction status to: ${finalStatus}`);
+
     const finalSellStockCorrection = await tx.sellStockCorrection.update({
       where: { id: sellStockCorrectionId },
       data: {
@@ -936,6 +989,12 @@ const approveSellStockCorrection = async (
           },
         },
       },
+    });
+
+    console.log('Final sell stock correction:', {
+      id: finalSellStockCorrection.id,
+      status: finalSellStockCorrection.status,
+      items: finalSellStockCorrection.items,
     });
 
     // Create log entry
@@ -957,6 +1016,8 @@ const approveSellStockCorrection = async (
       },
     });
 
+    console.log('=== Transaction completed successfully ===');
+
     return {
       ...finalSellStockCorrection,
       netTotalAdjustment: netTotalAdjustment || 0,
@@ -972,13 +1033,28 @@ const approveSellStockCorrection = async (
     };
   });
 
+  console.log('=== Function returning result ===');
   return result;
 };
+
 const deleteSellStockCorrection = async (id, userId) => {
+  console.log('=== Starting deleteSellStockCorrection ===');
+  console.log('Correction ID:', id);
+  console.log('User ID:', userId);
+
   const existingSellStockCorrection = await getSellStockCorrectionById(id);
   if (!existingSellStockCorrection) {
+    console.error('❌ Sell stock correction not found:', id);
     throw new ApiError(httpStatus.NOT_FOUND, 'Sell stock correction not found');
   }
+
+  console.log('✅ Found sell stock correction:', {
+    id: existingSellStockCorrection.id,
+    status: existingSellStockCorrection.status,
+    reference: existingSellStockCorrection.reference,
+    sellId: existingSellStockCorrection.sellId,
+    notes: existingSellStockCorrection.notes,
+  });
 
   return prisma.$transaction(async (tx) => {
     // Get all sell stock correction items with their batches for reversal
@@ -997,13 +1073,31 @@ const deleteSellStockCorrection = async (id, userId) => {
         },
       });
 
-    // Prepare operations for stock reversal (only for APPROVED corrections)
+    console.log(
+      `📦 Found ${correctionItemsWithBatches.length} correction items`,
+    );
+
+    // Get the batch ID from the correction item for precise matching
+    const correctionItem = correctionItemsWithBatches[0];
+    const targetBatchId = correctionItem?.batches[0]?.batchId;
+    const targetReference = existingSellStockCorrection.reference;
+
+    console.log(`🎯 Looking for ledger with:`);
+    console.log(`   - Reference: ${targetReference}`);
+    console.log(`   - Batch ID: ${targetBatchId}`);
+    console.log(`   - Correction notes: ${correctionItem?.notes || 'N/A'}`);
+
+    // Prepare operations for stock reversal
     const reversalOperations = [];
     let netTotalAdjustment = 0;
 
-    // If the correction was approved, reverse the stock movements
-    if (existingSellStockCorrection.status === 'APPROVED') {
-      // Get the associated sell to calculate net total reversal
+    // If the correction was approved or partially approved, reverse the stock movements
+    if (['APPROVED', 'PARTIAL'].includes(existingSellStockCorrection.status)) {
+      console.log(
+        '🔄 Reversing stock movements for approved/partial correction',
+      );
+
+      // Get the associated sell
       let sell = null;
       if (existingSellStockCorrection.sellId) {
         sell = await tx.sell.findUnique({
@@ -1016,41 +1110,190 @@ const deleteSellStockCorrection = async (id, userId) => {
             },
           },
         });
+        console.log('✅ Found associated sell:', sell?.invoiceNo);
       }
 
-      // Reverse each correction item
+      // Find potential stock ledger entries
+      console.log('\n🔍 Searching for stock ledger entries...');
+
+      const potentialLedgers = await tx.stockLedger.findMany({
+        where: {
+          OR: [
+            // Match by reference
+            {
+              reference: targetReference,
+            },
+            // Match by notes containing batch ID
+            {
+              notes: {
+                contains: targetBatchId,
+              },
+            },
+            // Match by notes containing correction patterns
+            {
+              OR: [
+                {
+                  notes: {
+                    contains: 'Sell stock addition',
+                  },
+                },
+                {
+                  notes: {
+                    contains: 'Sell stock subtraction',
+                  },
+                },
+              ],
+            },
+          ],
+        },
+      });
+
+      console.log(
+        `Found ${potentialLedgers.length} potential stock ledger entries:`,
+      );
+      potentialLedgers.forEach((ledger, index) => {
+        console.log(`\n  ${index + 1}. ID: ${ledger.id}`);
+        console.log(`     Reference: ${ledger.reference}`);
+        console.log(`     Notes: ${ledger.notes}`);
+        console.log(`     Movement: ${ledger.movementType}`);
+        console.log(`     Quantity: ${ledger.quantity}`);
+      });
+
+      // Find the SPECIFIC correction ledger using multiple criteria
+      let correctionLedgerId = null;
+      let matchedLedger = null;
+
+      for (const ledger of potentialLedgers) {
+        // Check if this ledger matches our correction
+        const matchesReference = ledger.reference === targetReference;
+        const matchesBatch = ledger.notes.includes(targetBatchId);
+        const isCorrectionNote =
+          ledger.notes.includes('Sell stock addition') ||
+          ledger.notes.includes('Sell stock subtraction');
+        const isNotReconciliation = !ledger.notes.includes(
+          'Sale delivery to customer',
+        );
+
+        // Score the match (higher is better)
+        let matchScore = 0;
+        if (matchesReference) matchScore += 3;
+        if (matchesBatch) matchScore += 3;
+        if (isCorrectionNote) matchScore += 2;
+        if (isNotReconciliation) matchScore += 1;
+
+        console.log(`\n  Evaluating ledger ${ledger.id}:`);
+        console.log(
+          `     - Matches reference (${targetReference}): ${matchesReference}`,
+        );
+        console.log(`     - Contains batch ${targetBatchId}: ${matchesBatch}`);
+        console.log(`     - Is correction note: ${isCorrectionNote}`);
+        console.log(`     - Not reconciliation: ${isNotReconciliation}`);
+        console.log(`     - Match score: ${matchScore}/9`);
+
+        // If we find a perfect match (reference + batch + correction note)
+        if (
+          matchesReference &&
+          matchesBatch &&
+          isCorrectionNote &&
+          isNotReconciliation
+        ) {
+          correctionLedgerId = ledger.id;
+          matchedLedger = ledger;
+          console.log(`   ⭐ PERFECT MATCH FOUND!`);
+          break;
+        }
+
+        // Otherwise track the best match
+        if (matchScore > 5 && !correctionLedgerId) {
+          correctionLedgerId = ledger.id;
+          matchedLedger = ledger;
+          console.log(`   📍 Good match found (score: ${matchScore})`);
+        }
+      }
+
+      // Delete the matched ledger if found
+      if (correctionLedgerId && matchedLedger) {
+        console.log(`\n✅ Found matching correction ledger:`);
+        console.log(`   ID: ${correctionLedgerId}`);
+        console.log(`   Notes: ${matchedLedger.notes}`);
+        console.log(`   Reference: ${matchedLedger.reference}`);
+
+        await tx.stockLedger.delete({
+          where: { id: correctionLedgerId },
+        });
+        console.log(`✅ Deleted correction ledger: ${correctionLedgerId}`);
+      } else {
+        console.log('⚠️ No matching correction ledger found to delete');
+
+        // Debug: Show all ledgers that might be related
+        console.log('\n🔍 Debug: All ledgers with reference', targetReference);
+        const refLedgers = potentialLedgers.filter(
+          (l) => l.reference === targetReference,
+        );
+        refLedgers.forEach((ledger, i) => {
+          console.log(
+            `  ${i + 1}. ${ledger.id}: ${ledger.notes.substring(0, 60)}...`,
+          );
+        });
+      }
+
+      // Process each correction item for stock reversal
       correctionItemsWithBatches.forEach((item) => {
+        if (
+          existingSellStockCorrection.status === 'PARTIAL' &&
+          item.itemSaleStatus !== 'DELIVERED'
+        ) {
+          console.log(
+            `⏭️ Skipping non-delivered item ${item.id} for partial correction`,
+          );
+          return;
+        }
+
         const originalQuantity = item.quantity;
         const isAddition = originalQuantity > 0;
-        const reverseMovementType = isAddition ? 'IN' : 'OUT'; // Reverse the original movement
         const absoluteQuantity = Math.abs(originalQuantity);
 
-        // Calculate net total adjustment for reversal
+        console.log(`\n  📊 Processing item ${item.id}:`, {
+          originalQuantity,
+          isAddition,
+          absoluteQuantity,
+          shopId: item.shopId,
+          itemSaleStatus: item.itemSaleStatus,
+        });
+
         if (sell) {
           if (isAddition) {
-            // For additions: Use the correction item's unit price (reverse subtraction)
             const itemValueAdjustment = absoluteQuantity * item.unitPrice;
             netTotalAdjustment -= itemValueAdjustment;
+            console.log(
+              `    Net total adjustment: -${itemValueAdjustment} (reverse addition)`,
+            );
           } else {
-            // For subtractions: Find the corresponding sell item and use its unit price (reverse addition)
             const sellItem = sell.items.find(
               (s) => s.productId === item.productId && s.shopId === item.shopId,
             );
-            if (sellItem) {
-              const itemValueAdjustment = absoluteQuantity * sellItem.unitPrice;
-              netTotalAdjustment += itemValueAdjustment;
-            }
+            const priceToUse = sellItem?.unitPrice || item.unitPrice;
+            const itemValueAdjustment = absoluteQuantity * priceToUse;
+            netTotalAdjustment += itemValueAdjustment;
+            console.log(
+              `    Net total adjustment: +${itemValueAdjustment} (reverse subtraction)`,
+            );
           }
         }
 
-        // Handle batch-level stock reversal if batches exist
         if (item.batches && item.batches.length > 0) {
+          console.log(`    Item has ${item.batches.length} batches`);
+
           item.batches.forEach((correctionBatch) => {
-            const batchQuantity = correctionBatch.quantity;
+            const batchQuantity = Math.abs(correctionBatch.quantity);
             const { batchId } = correctionBatch;
 
             if (item.shopId) {
-              // Reverse the stock update - do the opposite of the original operation
+              console.log(`    Reversing batch ${batchId}:`, {
+                action: isAddition ? 'decrement' : 'increment',
+                quantity: batchQuantity,
+              });
+
               reversalOperations.push(
                 tx.shopStock.update({
                   where: {
@@ -1061,87 +1304,34 @@ const deleteSellStockCorrection = async (id, userId) => {
                   },
                   data: {
                     quantity: isAddition
-                      ? { increment: batchQuantity } // Reverse subtraction by adding
-                      : { decrement: batchQuantity }, // Reverse addition by subtracting
-                  },
-                }),
-              );
-
-              // Create reverse stock ledger entry
-              reversalOperations.push(
-                tx.stockLedger.create({
-                  data: {
-                    batchId,
-                    shopId: item.shopId,
-                    movementType: reverseMovementType,
-                    quantity: batchQuantity,
-                    unitOfMeasureId: item.unitOfMeasureId,
-                    reference: `SELL-CORRECTION-REVERSAL-${id}`,
-                    userId,
-                    notes: `Sell stock correction reversal - ${
-                      isAddition
-                        ? 'Adding back subtracted stock'
-                        : 'Removing added stock'
-                    } for Item: ${item.id} (Batch: ${batchId})`,
-                    movementDate: new Date(),
+                      ? { decrement: batchQuantity }
+                      : { increment: batchQuantity },
                   },
                 }),
               );
             }
           });
-        } else if (item.shopId) {
-          // Fallback to product-level stock reversal
-          reversalOperations.push(
-            tx.shopStock.update({
-              where: {
-                shopId_batchId: {
-                  shopId: item.shopId,
-                  batchId: 'no-batch',
-                },
-              },
-              data: {
-                quantity: isAddition
-                  ? { increment: absoluteQuantity } // Reverse subtraction
-                  : { decrement: absoluteQuantity }, // Reverse addition
-              },
-            }),
-          );
-
-          // Create reverse stock ledger entry for shop
-          reversalOperations.push(
-            tx.stockLedger.create({
-              data: {
-                batchId: null,
-                shopId: item.shopId,
-                movementType: reverseMovementType,
-                quantity: absoluteQuantity,
-                unitOfMeasureId: item.unitOfMeasureId,
-                reference: `SELL-CORRECTION-REVERSAL-${id}`,
-                userId,
-                notes: `Sell stock correction reversal - ${
-                  isAddition
-                    ? 'Adding back subtracted stock'
-                    : 'Removing added stock'
-                } for Item: ${item.id}`,
-                movementDate: new Date(),
-              },
-            }),
-          );
         }
       });
 
-      // Reverse net total adjustment if there's an associated sell
+      // Reverse net total adjustment
       if (sell && netTotalAdjustment !== 0) {
         const newNetTotal = sell.NetTotal + netTotalAdjustment;
-
-        // Ensure net total doesn't go negative
         const finalNetTotal = Math.max(0, newNetTotal);
+
+        console.log(`\n💰 Adjusting sell NetTotal:`, {
+          original: sell.NetTotal,
+          adjustment: netTotalAdjustment,
+          new: newNetTotal,
+          final: finalNetTotal,
+        });
 
         reversalOperations.push(
           tx.sell.update({
             where: { id: sell.id },
             data: {
               NetTotal: finalNetTotal,
+              grandTotal: finalNetTotal,
               updatedById: userId,
               updatedAt: new Date(),
             },
@@ -1151,50 +1341,50 @@ const deleteSellStockCorrection = async (id, userId) => {
 
       // Execute all reversal operations
       if (reversalOperations.length > 0) {
+        console.log(
+          `\n⚡ Executing ${reversalOperations.length} reversal operations...`,
+        );
         await Promise.all(reversalOperations);
+        console.log('✅ All reversal operations completed');
       }
     }
 
-    // Delete all sell stock correction batches first
-    await tx.sellStockCorrectionBatch.deleteMany({
+    // Delete correction batches, items, and the correction itself
+    console.log('\n🗑️ Deleting sell stock correction batches...');
+    const deletedBatches = await tx.sellStockCorrectionBatch.deleteMany({
       where: {
         correctionItem: {
           correctionId: id,
         },
       },
     });
+    console.log(`✅ Deleted ${deletedBatches.count} batches`);
 
-    // Delete all sell stock correction items
-    await tx.sellStockCorrectionItem.deleteMany({
+    console.log('🗑️ Deleting sell stock correction items...');
+    const deletedItems = await tx.sellStockCorrectionItem.deleteMany({
       where: { correctionId: id },
     });
+    console.log(`✅ Deleted ${deletedItems.count} items`);
 
-    // Delete the sell stock correction
+    console.log('🗑️ Deleting sell stock correction...');
     await tx.sellStockCorrection.delete({
       where: { id },
     });
+    console.log('✅ Sell stock correction deleted');
 
-    // Create log entry with reversal details
+    // Create log entry
     let logMessage = `Sell stock correction ${
       existingSellStockCorrection.reference || id
     } deleted`;
 
-    if (existingSellStockCorrection.status === 'APPROVED') {
-      const totalItemsReversed = correctionItemsWithBatches.length;
-      const totalBatchesReversed = correctionItemsWithBatches.reduce(
-        (sum, item) => sum + (item.batches?.length || 0),
-        0,
-      );
-
-      logMessage += ` - Stock reversal completed: ${totalItemsReversed} items, ${totalBatchesReversed} batches`;
-
+    if (['APPROVED', 'PARTIAL'].includes(existingSellStockCorrection.status)) {
+      logMessage += ` - Stock reversal completed`;
       if (netTotalAdjustment !== 0) {
         logMessage += `, Net total adjusted by ${netTotalAdjustment}`;
       }
-    } else {
-      logMessage += ` (status: ${existingSellStockCorrection.status})`;
     }
 
+    console.log('\n📝 Creating log entry...');
     await tx.log.create({
       data: {
         action: logMessage,
@@ -1202,17 +1392,14 @@ const deleteSellStockCorrection = async (id, userId) => {
       },
     });
 
+    console.log('\n=== Delete operation completed successfully ===');
+
     return {
-      message: `Sell stock correction deleted successfully${
-        existingSellStockCorrection.status === 'APPROVED'
-          ? ' with stock reversal'
-          : ''
-      }`,
-      reversalPerformed: existingSellStockCorrection.status === 'APPROVED',
-      netTotalAdjustment:
-        existingSellStockCorrection.status === 'APPROVED'
-          ? netTotalAdjustment
-          : 0,
+      message: `Sell stock correction deleted successfully`,
+      reversalPerformed: ['APPROVED', 'PARTIAL'].includes(
+        existingSellStockCorrection.status,
+      ),
+      netTotalAdjustment: netTotalAdjustment || 0,
     };
   });
 };

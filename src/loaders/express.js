@@ -15,6 +15,7 @@ const rolesRouter = require('../routes/role.route');
 const permissionRouter = require('../routes/permission.route');
 const rolePermissionRouter = require('../routes/rolePermission.route');
 
+const MissingStockLedger = require('../routes/MissingStockLedger.route');
 const CategoryRouter = require('../routes/Category.route');
 const branchRouter = require('../routes/Branch.route');
 const customerRouter = require('../routes/Customer.route');
@@ -110,7 +111,7 @@ module.exports = async (app) => {
   app.use(storeRouter);
   app.use(productBatchRouter);
   app.use(CartRoutes);
-
+  app.use(MissingStockLedger);
   app.use(UnitOfMeasureRouter);
   app.use(ProductRouter);
   app.use(purchaseRouter);
