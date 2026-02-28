@@ -1077,15 +1077,16 @@ const deleteSellStockCorrection = async (id, userId) => {
       `📦 Found ${correctionItemsWithBatches.length} correction items`,
     );
 
-    // Get the batch ID from the correction item for precise matching
-    const correctionItem = correctionItemsWithBatches[0];
-    const targetBatchId = correctionItem?.batches[0]?.batchId;
-    const targetReference = existingSellStockCorrection.reference;
+    // Get all product IDs from correction items
+    const productIds = correctionItemsWithBatches.map(item => item.productId);
+    const batchIds = correctionItemsWithBatches.flatMap(item => 
+      item.batches.map(b => b.batchId)
+    );
+    
+    console.log(`📦 Product IDs: ${productIds.join(', ')}`);
+    console.log(`📦 Batch IDs: ${batchIds.join(', ')}`);
 
-    console.log(`🎯 Looking for ledger with:`);
-    console.log(`   - Reference: ${targetReference}`);
-    console.log(`   - Batch ID: ${targetBatchId}`);
-    console.log(`   - Correction notes: ${correctionItem?.notes || 'N/A'}`);
+    const targetReference = existingSellStockCorrection.reference;
 
     // Prepare operations for stock reversal
     const reversalOperations = [];
@@ -1113,128 +1114,89 @@ const deleteSellStockCorrection = async (id, userId) => {
         console.log('✅ Found associated sell:', sell?.invoiceNo);
       }
 
-      // Find potential stock ledger entries
-      console.log('\n🔍 Searching for stock ledger entries...');
+      // Find and DELETE ALL stock ledger entries related to this correction
+      console.log('\n🔍 Searching for ALL stock ledger entries to delete...');
 
-      const potentialLedgers = await tx.stockLedger.findMany({
-        where: {
-          OR: [
-            // Match by reference
-            {
-              reference: targetReference,
+      // Delete stock ledger entries by various criteria
+      const stockLedgerDeleteConditions = {
+        OR: [
+          // Delete by reference
+          {
+            reference: targetReference,
+          },
+          // Delete by batch IDs
+          {
+            batchId: {
+              in: batchIds,
             },
-            // Match by notes containing batch ID
-            {
-              notes: {
-                contains: targetBatchId,
+          },
+          // Delete by product IDs (if productId exists in StockLedger schema)
+          ...(batchIds.length === 0 ? [{
+            productId: {
+              in: productIds,
+            },
+          }] : []),
+          // Delete by notes containing correction patterns
+          {
+            AND: [
+              {
+                notes: {
+                  contains: 'Sell stock',
+                },
               },
-            },
-            // Match by notes containing correction patterns
-            {
-              OR: [
-                {
-                  notes: {
-                    contains: 'Sell stock addition',
+              {
+                OR: [
+                  {
+                    notes: {
+                      contains: 'addition',
+                    },
                   },
-                },
-                {
-                  notes: {
-                    contains: 'Sell stock subtraction',
+                  {
+                    notes: {
+                      contains: 'subtraction',
+                    },
                   },
-                },
-              ],
-            },
-          ],
-        },
+                  {
+                    notes: {
+                      contains: 'reduction',
+                    },
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      // Find all matching stock ledger entries
+      const stockLedgersToDelete = await tx.stockLedger.findMany({
+        where: stockLedgerDeleteConditions,
       });
 
-      console.log(
-        `Found ${potentialLedgers.length} potential stock ledger entries:`,
-      );
-      potentialLedgers.forEach((ledger, index) => {
+      console.log(`Found ${stockLedgersToDelete.length} stock ledger entries to delete:`);
+      stockLedgersToDelete.forEach((ledger, index) => {
         console.log(`\n  ${index + 1}. ID: ${ledger.id}`);
         console.log(`     Reference: ${ledger.reference}`);
         console.log(`     Notes: ${ledger.notes}`);
+        console.log(`     Batch ID: ${ledger.batchId}`);
+        console.log(`     Product ID: ${ledger.productId}`);
         console.log(`     Movement: ${ledger.movementType}`);
         console.log(`     Quantity: ${ledger.quantity}`);
       });
 
-      // Find the SPECIFIC correction ledger using multiple criteria
-      let correctionLedgerId = null;
-      let matchedLedger = null;
-
-      for (const ledger of potentialLedgers) {
-        // Check if this ledger matches our correction
-        const matchesReference = ledger.reference === targetReference;
-        const matchesBatch = ledger.notes.includes(targetBatchId);
-        const isCorrectionNote =
-          ledger.notes.includes('Sell stock addition') ||
-          ledger.notes.includes('Sell stock subtraction');
-        const isNotReconciliation = !ledger.notes.includes(
-          'Sale delivery to customer',
-        );
-
-        // Score the match (higher is better)
-        let matchScore = 0;
-        if (matchesReference) matchScore += 3;
-        if (matchesBatch) matchScore += 3;
-        if (isCorrectionNote) matchScore += 2;
-        if (isNotReconciliation) matchScore += 1;
-
-        console.log(`\n  Evaluating ledger ${ledger.id}:`);
-        console.log(
-          `     - Matches reference (${targetReference}): ${matchesReference}`,
-        );
-        console.log(`     - Contains batch ${targetBatchId}: ${matchesBatch}`);
-        console.log(`     - Is correction note: ${isCorrectionNote}`);
-        console.log(`     - Not reconciliation: ${isNotReconciliation}`);
-        console.log(`     - Match score: ${matchScore}/9`);
-
-        // If we find a perfect match (reference + batch + correction note)
-        if (
-          matchesReference &&
-          matchesBatch &&
-          isCorrectionNote &&
-          isNotReconciliation
-        ) {
-          correctionLedgerId = ledger.id;
-          matchedLedger = ledger;
-          console.log(`   ⭐ PERFECT MATCH FOUND!`);
-          break;
-        }
-
-        // Otherwise track the best match
-        if (matchScore > 5 && !correctionLedgerId) {
-          correctionLedgerId = ledger.id;
-          matchedLedger = ledger;
-          console.log(`   📍 Good match found (score: ${matchScore})`);
-        }
-      }
-
-      // Delete the matched ledger if found
-      if (correctionLedgerId && matchedLedger) {
-        console.log(`\n✅ Found matching correction ledger:`);
-        console.log(`   ID: ${correctionLedgerId}`);
-        console.log(`   Notes: ${matchedLedger.notes}`);
-        console.log(`   Reference: ${matchedLedger.reference}`);
-
-        await tx.stockLedger.delete({
-          where: { id: correctionLedgerId },
+      // DELETE all found stock ledger entries
+      if (stockLedgersToDelete.length > 0) {
+        const ledgerIds = stockLedgersToDelete.map(l => l.id);
+        const deleteResult = await tx.stockLedger.deleteMany({
+          where: {
+            id: {
+              in: ledgerIds,
+            },
+          },
         });
-        console.log(`✅ Deleted correction ledger: ${correctionLedgerId}`);
+        console.log(`✅ Deleted ${deleteResult.count} stock ledger entries`);
       } else {
-        console.log('⚠️ No matching correction ledger found to delete');
-
-        // Debug: Show all ledgers that might be related
-        console.log('\n🔍 Debug: All ledgers with reference', targetReference);
-        const refLedgers = potentialLedgers.filter(
-          (l) => l.reference === targetReference,
-        );
-        refLedgers.forEach((ledger, i) => {
-          console.log(
-            `  ${i + 1}. ${ledger.id}: ${ledger.notes.substring(0, 60)}...`,
-          );
-        });
+        console.log('⚠️ No stock ledger entries found to delete');
       }
 
       // Process each correction item for stock reversal
