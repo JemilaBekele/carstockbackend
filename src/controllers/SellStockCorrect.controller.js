@@ -8,7 +8,7 @@ const createSellStockCorrection = catchAsync(async (req, res) => {
   const sellStockCorrection =
     await sellStockCorrectionService.createSellStockCorrection(
       req.body,
-      'e97b5b33-e54c-472f-aad0-5d7f2e827381',
+      'f39cac5c-3f83-4f55-8012-d55a9a812982',
     );
   res.status(httpStatus.CREATED).send({
     success: true,
