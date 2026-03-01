@@ -571,50 +571,46 @@ const getAllProductsFromSellCorrections = async () => {
   };
 };
 
-const deleteStockLedgerByIds = async (ledgerIds, tx = prisma) => {
+const deleteStockLedgerByIds = async (ledgerId, tx = prisma) => {
   try {
     // Validate input
-    if (!ledgerIds || !Array.isArray(ledgerIds) || ledgerIds.length === 0) {
-      throw new Error('Please provide an array of stock ledger IDs to delete');
+    if (!ledgerId || typeof ledgerId !== 'string') {
+      throw new Error('Please provide a valid stock ledger ID to delete');
     }
 
-    // Check if the ledger entries exist
-    const existingLedgers = await tx.stockLedger.findMany({
+    // Check if the ledger entry exists
+    const existingLedger = await tx.stockLedger.findUnique({
       where: {
-        id: {
-          in: ledgerIds,
-        },
+        id: ledgerId,
       },
       select: {
         id: true,
       },
     });
 
-    if (existingLedgers.length === 0) {
+    if (!existingLedger) {
       return {
         success: false,
-        message: 'No stock ledger entries found with the provided IDs',
+        message: 'No stock ledger entry found with the provided ID',
         deletedCount: 0,
       };
     }
 
-    // Delete the stock ledger entries
-    const deleteResult = await tx.stockLedger.deleteMany({
+    // Delete the stock ledger entry
+    const deleteResult = await tx.stockLedger.delete({
       where: {
-        id: {
-          in: ledgerIds,
-        },
+        id: ledgerId,
       },
     });
 
     return {
       success: true,
-      message: `Successfully deleted ${deleteResult.count} stock ledger entries`,
-      deletedCount: deleteResult.count,
-      deletedIds: ledgerIds,
+      message: `Successfully deleted stock ledger entry`,
+      deletedCount: 1,
+      deletedId: ledgerId,
     };
   } catch (error) {
-    console.error('Error deleting stock ledger entries:', error);
+    console.error('Error deleting stock ledger entry:', error);
     throw error;
   }
 };
