@@ -26,4 +26,10 @@ router.get(
   // checkPermission('VIEW_SELL_CORRECTION_PRODUCTS'),
   stockLedgerReconciliationController.getProductsFromSellCorrections,
 );
+router.delete(
+  '/api/delete/stockLedger/:id',
+  auth,
+  //   checkPermission('DELETE_CUSTOMER'),
+  stockLedgerReconciliationController.deleteStockLedgerByIds,
+);
 module.exports = router;

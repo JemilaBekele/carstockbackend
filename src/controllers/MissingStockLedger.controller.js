@@ -19,7 +19,13 @@ const findMissingStockLedgers = catchAsync(async (req, res) => {
     data: result,
   });
 });
-
+const deleteStockLedgerByIds = catchAsync(async (req, res) => {
+  await stockLedgerReconciliationService.deleteStockLedgerByIds(req.params.id);
+  res.status(httpStatus.OK).send({
+    success: true,
+    message: 'Customer deleted successfully',
+  });
+});
 /**
  * Create missing stock ledger entries for a specific sale
  */
@@ -57,4 +63,5 @@ module.exports = {
   findMissingStockLedgers,
   createMissingStockLedgerForSale,
   getProductsFromSellCorrections,
+  deleteStockLedgerByIds,
 };

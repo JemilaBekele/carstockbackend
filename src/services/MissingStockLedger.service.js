@@ -570,8 +570,57 @@ const getAllProductsFromSellCorrections = async () => {
     count: uniqueProducts.length,
   };
 };
+
+const deleteStockLedgerByIds = async (ledgerIds, tx = prisma) => {
+  try {
+    // Validate input
+    if (!ledgerIds || !Array.isArray(ledgerIds) || ledgerIds.length === 0) {
+      throw new Error('Please provide an array of stock ledger IDs to delete');
+    }
+
+    // Check if the ledger entries exist
+    const existingLedgers = await tx.stockLedger.findMany({
+      where: {
+        id: {
+          in: ledgerIds,
+        },
+      },
+      select: {
+        id: true,
+      },
+    });
+
+    if (existingLedgers.length === 0) {
+      return {
+        success: false,
+        message: 'No stock ledger entries found with the provided IDs',
+        deletedCount: 0,
+      };
+    }
+
+    // Delete the stock ledger entries
+    const deleteResult = await tx.stockLedger.deleteMany({
+      where: {
+        id: {
+          in: ledgerIds,
+        },
+      },
+    });
+
+    return {
+      success: true,
+      message: `Successfully deleted ${deleteResult.count} stock ledger entries`,
+      deletedCount: deleteResult.count,
+      deletedIds: ledgerIds,
+    };
+  } catch (error) {
+    console.error('Error deleting stock ledger entries:', error);
+    throw error;
+  }
+};
 module.exports = {
   findMissingStockLedgers,
   createMissingStockLedgerForSale,
   getAllProductsFromSellCorrections,
+  deleteStockLedgerByIds,
 };
