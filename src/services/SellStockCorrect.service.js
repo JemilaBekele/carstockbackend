@@ -1037,6 +1037,375 @@ const approveSellStockCorrection = async (
   return result;
 };
 
+// const deleteSellStockCorrection = async (id, userId) => {
+//   console.log('=== Starting deleteSellStockCorrection ===');
+//   console.log('Correction ID:', id);
+//   console.log('User ID:', userId);
+
+//   const existingSellStockCorrection = await getSellStockCorrectionById(id);
+//   if (!existingSellStockCorrection) {
+//     console.error('❌ Sell stock correction not found:', id);
+//     throw new ApiError(httpStatus.NOT_FOUND, 'Sell stock correction not found');
+//   }
+
+//   console.log('✅ Found sell stock correction:', {
+//     id: existingSellStockCorrection.id,
+//     status: existingSellStockCorrection.status,
+//     reference: existingSellStockCorrection.reference,
+//     sellId: existingSellStockCorrection.sellId,
+//     notes: existingSellStockCorrection.notes,
+//   });
+
+//   return prisma.$transaction(async (tx) => {
+//     // Get all sell stock correction items with their batches for reversal
+//     const correctionItemsWithBatches =
+//       await tx.sellStockCorrectionItem.findMany({
+//         where: { correctionId: id },
+//         include: {
+//           batches: {
+//             include: {
+//               batch: true,
+//             },
+//           },
+//           shop: true,
+//           unitOfMeasure: true,
+//           product: true,
+//         },
+//       });
+
+//     console.log(
+//       `📦 Found ${correctionItemsWithBatches.length} correction items`,
+//     );
+
+//     // Get the batch ID from the correction item for precise matching
+//     const correctionItem = correctionItemsWithBatches[0];
+//     const targetBatchId = correctionItem?.batches[0]?.batchId;
+//     const targetReference = existingSellStockCorrection.reference;
+
+//     console.log(`🎯 Looking for ledger with:`);
+//     console.log(`   - Reference: ${targetReference}`);
+//     console.log(`   - Batch ID: ${targetBatchId}`);
+//     console.log(`   - Correction notes: ${correctionItem?.notes || 'N/A'}`);
+
+//     // Prepare operations for stock reversal
+//     const reversalOperations = [];
+//     let netTotalAdjustment = 0;
+
+//     // If the correction was approved or partially approved, reverse the stock movements
+//     if (['APPROVED', 'PARTIAL'].includes(existingSellStockCorrection.status)) {
+//       console.log(
+//         '🔄 Reversing stock movements for approved/partial correction',
+//       );
+
+//       // Get the associated sell
+//       let sell = null;
+//       if (existingSellStockCorrection.sellId) {
+//         sell = await tx.sell.findUnique({
+//           where: { id: existingSellStockCorrection.sellId },
+//           include: {
+//             items: {
+//               include: {
+//                 unitOfMeasure: true,
+//               },
+//             },
+//           },
+//         });
+//         console.log('✅ Found associated sell:', sell?.invoiceNo);
+//       }
+
+//       // Find potential stock ledger entries
+//       console.log('\n🔍 Searching for stock ledger entries...');
+
+//       const potentialLedgers = await tx.stockLedger.findMany({
+//         where: {
+//           OR: [
+//             // Match by reference
+//             {
+//               reference: targetReference,
+//             },
+//             // Match by notes containing batch ID
+//             {
+//               notes: {
+//                 contains: targetBatchId,
+//               },
+//             },
+//             // Match by notes containing correction patterns
+//             {
+//               OR: [
+//                 {
+//                   notes: {
+//                     contains: 'Sell stock addition',
+//                   },
+//                 },
+//                 {
+//                   notes: {
+//                     contains: 'Sell stock subtraction',
+//                   },
+//                 },
+//               ],
+//             },
+//           ],
+//         },
+//       });
+
+//       console.log(
+//         `Found ${potentialLedgers.length} potential stock ledger entries:`,
+//       );
+//       potentialLedgers.forEach((ledger, index) => {
+//         console.log(`\n  ${index + 1}. ID: ${ledger.id}`);
+//         console.log(`     Reference: ${ledger.reference}`);
+//         console.log(`     Notes: ${ledger.notes}`);
+//         console.log(`     Movement: ${ledger.movementType}`);
+//         console.log(`     Quantity: ${ledger.quantity}`);
+//       });
+
+//       // Find the SPECIFIC correction ledger using multiple criteria
+//       let correctionLedgerId = null;
+//       let matchedLedger = null;
+
+//       for (const ledger of potentialLedgers) {
+//         // Check if this ledger matches our correction
+//         const matchesReference = ledger.reference === targetReference;
+//         const matchesBatch = ledger.notes.includes(targetBatchId);
+//         const isCorrectionNote =
+//           ledger.notes.includes('Sell stock addition') ||
+//           ledger.notes.includes('Sell stock subtraction');
+//         const isNotReconciliation = !ledger.notes.includes(
+//           'Sale delivery to customer',
+//         );
+
+//         // Score the match (higher is better)
+//         let matchScore = 0;
+//         if (matchesReference) matchScore += 3;
+//         if (matchesBatch) matchScore += 3;
+//         if (isCorrectionNote) matchScore += 2;
+//         if (isNotReconciliation) matchScore += 1;
+
+//         console.log(`\n  Evaluating ledger ${ledger.id}:`);
+//         console.log(
+//           `     - Matches reference (${targetReference}): ${matchesReference}`,
+//         );
+//         console.log(`     - Contains batch ${targetBatchId}: ${matchesBatch}`);
+//         console.log(`     - Is correction note: ${isCorrectionNote}`);
+//         console.log(`     - Not reconciliation: ${isNotReconciliation}`);
+//         console.log(`     - Match score: ${matchScore}/9`);
+
+//         // If we find a perfect match (reference + batch + correction note)
+//         if (
+//           matchesReference &&
+//           matchesBatch &&
+//           isCorrectionNote &&
+//           isNotReconciliation
+//         ) {
+//           correctionLedgerId = ledger.id;
+//           matchedLedger = ledger;
+//           console.log(`   ⭐ PERFECT MATCH FOUND!`);
+//           break;
+//         }
+
+//         // Otherwise track the best match
+//         if (matchScore > 5 && !correctionLedgerId) {
+//           correctionLedgerId = ledger.id;
+//           matchedLedger = ledger;
+//           console.log(`   📍 Good match found (score: ${matchScore})`);
+//         }
+//       }
+
+//       // Delete the matched ledger if found
+//       if (correctionLedgerId && matchedLedger) {
+//         console.log(`\n✅ Found matching correction ledger:`);
+//         console.log(`   ID: ${correctionLedgerId}`);
+//         console.log(`   Notes: ${matchedLedger.notes}`);
+//         console.log(`   Reference: ${matchedLedger.reference}`);
+
+//         await tx.stockLedger.delete({
+//           where: { id: correctionLedgerId },
+//         });
+//         console.log(`✅ Deleted correction ledger: ${correctionLedgerId}`);
+//       } else {
+//         console.log('⚠️ No matching correction ledger found to delete');
+
+//         // Debug: Show all ledgers that might be related
+//         console.log('\n🔍 Debug: All ledgers with reference', targetReference);
+//         const refLedgers = potentialLedgers.filter(
+//           (l) => l.reference === targetReference,
+//         );
+//         refLedgers.forEach((ledger, i) => {
+//           console.log(
+//             `  ${i + 1}. ${ledger.id}: ${ledger.notes.substring(0, 60)}...`,
+//           );
+//         });
+//       }
+
+//       // Process each correction item for stock reversal
+//       correctionItemsWithBatches.forEach((item) => {
+//         if (
+//           existingSellStockCorrection.status === 'PARTIAL' &&
+//           item.itemSaleStatus !== 'DELIVERED'
+//         ) {
+//           console.log(
+//             `⏭️ Skipping non-delivered item ${item.id} for partial correction`,
+//           );
+//           return;
+//         }
+
+//         const originalQuantity = item.quantity;
+//         const isAddition = originalQuantity > 0;
+//         const absoluteQuantity = Math.abs(originalQuantity);
+
+//         console.log(`\n  📊 Processing item ${item.id}:`, {
+//           originalQuantity,
+//           isAddition,
+//           absoluteQuantity,
+//           shopId: item.shopId,
+//           itemSaleStatus: item.itemSaleStatus,
+//         });
+
+//         if (sell) {
+//           if (isAddition) {
+//             const itemValueAdjustment = absoluteQuantity * item.unitPrice;
+//             netTotalAdjustment -= itemValueAdjustment;
+//             console.log(
+//               `    Net total adjustment: -${itemValueAdjustment} (reverse addition)`,
+//             );
+//           } else {
+//             const sellItem = sell.items.find(
+//               (s) => s.productId === item.productId && s.shopId === item.shopId,
+//             );
+//             const priceToUse = sellItem?.unitPrice || item.unitPrice;
+//             const itemValueAdjustment = absoluteQuantity * priceToUse;
+//             netTotalAdjustment += itemValueAdjustment;
+//             console.log(
+//               `    Net total adjustment: +${itemValueAdjustment} (reverse subtraction)`,
+//             );
+//           }
+//         }
+
+//         if (item.batches && item.batches.length > 0) {
+//           console.log(`    Item has ${item.batches.length} batches`);
+
+//           item.batches.forEach((correctionBatch) => {
+//             const batchQuantity = Math.abs(correctionBatch.quantity);
+//             const { batchId } = correctionBatch;
+
+//             if (item.shopId) {
+//               console.log(`    Reversing batch ${batchId}:`, {
+//                 action: isAddition ? 'decrement' : 'increment',
+//                 quantity: batchQuantity,
+//               });
+
+//               reversalOperations.push(
+//                 tx.shopStock.update({
+//                   where: {
+//                     shopId_batchId: {
+//                       shopId: item.shopId,
+//                       batchId,
+//                     },
+//                   },
+//                   data: {
+//                     quantity: isAddition
+//                       ? { decrement: batchQuantity }
+//                       : { increment: batchQuantity },
+//                   },
+//                 }),
+//               );
+//             }
+//           });
+//         }
+//       });
+
+//       // Reverse net total adjustment
+//       if (sell && netTotalAdjustment !== 0) {
+//         const newNetTotal = sell.NetTotal + netTotalAdjustment;
+//         const finalNetTotal = Math.max(0, newNetTotal);
+
+//         console.log(`\n💰 Adjusting sell NetTotal:`, {
+//           original: sell.NetTotal,
+//           adjustment: netTotalAdjustment,
+//           new: newNetTotal,
+//           final: finalNetTotal,
+//         });
+
+//         reversalOperations.push(
+//           tx.sell.update({
+//             where: { id: sell.id },
+//             data: {
+//               NetTotal: finalNetTotal,
+//               grandTotal: finalNetTotal,
+//               updatedById: userId,
+//               updatedAt: new Date(),
+//             },
+//           }),
+//         );
+//       }
+
+//       // Execute all reversal operations
+//       if (reversalOperations.length > 0) {
+//         console.log(
+//           `\n⚡ Executing ${reversalOperations.length} reversal operations...`,
+//         );
+//         await Promise.all(reversalOperations);
+//         console.log('✅ All reversal operations completed');
+//       }
+//     }
+
+//     // Delete correction batches, items, and the correction itself
+//     console.log('\n🗑️ Deleting sell stock correction batches...');
+//     const deletedBatches = await tx.sellStockCorrectionBatch.deleteMany({
+//       where: {
+//         correctionItem: {
+//           correctionId: id,
+//         },
+//       },
+//     });
+//     console.log(`✅ Deleted ${deletedBatches.count} batches`);
+
+//     console.log('🗑️ Deleting sell stock correction items...');
+//     const deletedItems = await tx.sellStockCorrectionItem.deleteMany({
+//       where: { correctionId: id },
+//     });
+//     console.log(`✅ Deleted ${deletedItems.count} items`);
+
+//     console.log('🗑️ Deleting sell stock correction...');
+//     await tx.sellStockCorrection.delete({
+//       where: { id },
+//     });
+//     console.log('✅ Sell stock correction deleted');
+
+//     // Create log entry
+//     let logMessage = `Sell stock correction ${
+//       existingSellStockCorrection.reference || id
+//     } deleted`;
+
+//     if (['APPROVED', 'PARTIAL'].includes(existingSellStockCorrection.status)) {
+//       logMessage += ` - Stock reversal completed`;
+//       if (netTotalAdjustment !== 0) {
+//         logMessage += `, Net total adjusted by ${netTotalAdjustment}`;
+//       }
+//     }
+
+//     console.log('\n📝 Creating log entry...');
+//     await tx.log.create({
+//       data: {
+//         action: logMessage,
+//         userId,
+//       },
+//     });
+
+//     console.log('\n=== Delete operation completed successfully ===');
+
+//     return {
+//       message: `Sell stock correction deleted successfully`,
+//       reversalPerformed: ['APPROVED', 'PARTIAL'].includes(
+//         existingSellStockCorrection.status,
+//       ),
+//       netTotalAdjustment: netTotalAdjustment || 0,
+//     };
+//   });
+// };
+// Reject SellStockCorrection
+
+
 const deleteSellStockCorrection = async (id, userId) => {
   console.log('=== Starting deleteSellStockCorrection ===');
   console.log('Correction ID:', id);
@@ -1057,45 +1426,18 @@ const deleteSellStockCorrection = async (id, userId) => {
   });
 
   return prisma.$transaction(async (tx) => {
-    // Get all sell stock correction items with their batches for reversal
-    const correctionItemsWithBatches =
-      await tx.sellStockCorrectionItem.findMany({
-        where: { correctionId: id },
-        include: {
-          batches: {
-            include: {
-              batch: true,
-            },
-          },
-          shop: true,
-          unitOfMeasure: true,
-          product: true,
-        },
-      });
+    // Get all sell stock correction items for net total calculation
+    const correctionItems = await tx.sellStockCorrectionItem.findMany({
+      where: { correctionId: id },
+    });
 
-    console.log(
-      `📦 Found ${correctionItemsWithBatches.length} correction items`,
-    );
+    console.log(`📦 Found ${correctionItems.length} correction items`);
 
-    // Get the batch ID from the correction item for precise matching
-    const correctionItem = correctionItemsWithBatches[0];
-    const targetBatchId = correctionItem?.batches[0]?.batchId;
-    const targetReference = existingSellStockCorrection.reference;
-
-    console.log(`🎯 Looking for ledger with:`);
-    console.log(`   - Reference: ${targetReference}`);
-    console.log(`   - Batch ID: ${targetBatchId}`);
-    console.log(`   - Correction notes: ${correctionItem?.notes || 'N/A'}`);
-
-    // Prepare operations for stock reversal
-    const reversalOperations = [];
     let netTotalAdjustment = 0;
 
-    // If the correction was approved or partially approved, reverse the stock movements
+    // If the correction was approved or partially approved, update the net total
     if (['APPROVED', 'PARTIAL'].includes(existingSellStockCorrection.status)) {
-      console.log(
-        '🔄 Reversing stock movements for approved/partial correction',
-      );
+      console.log('💰 Calculating net total adjustment');
 
       // Get the associated sell
       let sell = null;
@@ -1113,160 +1455,18 @@ const deleteSellStockCorrection = async (id, userId) => {
         console.log('✅ Found associated sell:', sell?.invoiceNo);
       }
 
-      // Find potential stock ledger entries
-      console.log('\n🔍 Searching for stock ledger entries...');
-
-      const potentialLedgers = await tx.stockLedger.findMany({
-        where: {
-          OR: [
-            // Match by reference
-            {
-              reference: targetReference,
-            },
-            // Match by notes containing batch ID
-            {
-              notes: {
-                contains: targetBatchId,
-              },
-            },
-            // Match by notes containing correction patterns
-            {
-              OR: [
-                {
-                  notes: {
-                    contains: 'Sell stock addition',
-                  },
-                },
-                {
-                  notes: {
-                    contains: 'Sell stock subtraction',
-                  },
-                },
-              ],
-            },
-          ],
-        },
-      });
-
-      console.log(
-        `Found ${potentialLedgers.length} potential stock ledger entries:`,
-      );
-      potentialLedgers.forEach((ledger, index) => {
-        console.log(`\n  ${index + 1}. ID: ${ledger.id}`);
-        console.log(`     Reference: ${ledger.reference}`);
-        console.log(`     Notes: ${ledger.notes}`);
-        console.log(`     Movement: ${ledger.movementType}`);
-        console.log(`     Quantity: ${ledger.quantity}`);
-      });
-
-      // Find the SPECIFIC correction ledger using multiple criteria
-      let correctionLedgerId = null;
-      let matchedLedger = null;
-
-      for (const ledger of potentialLedgers) {
-        // Check if this ledger matches our correction
-        const matchesReference = ledger.reference === targetReference;
-        const matchesBatch = ledger.notes.includes(targetBatchId);
-        const isCorrectionNote =
-          ledger.notes.includes('Sell stock addition') ||
-          ledger.notes.includes('Sell stock subtraction');
-        const isNotReconciliation = !ledger.notes.includes(
-          'Sale delivery to customer',
-        );
-
-        // Score the match (higher is better)
-        let matchScore = 0;
-        if (matchesReference) matchScore += 3;
-        if (matchesBatch) matchScore += 3;
-        if (isCorrectionNote) matchScore += 2;
-        if (isNotReconciliation) matchScore += 1;
-
-        console.log(`\n  Evaluating ledger ${ledger.id}:`);
-        console.log(
-          `     - Matches reference (${targetReference}): ${matchesReference}`,
-        );
-        console.log(`     - Contains batch ${targetBatchId}: ${matchesBatch}`);
-        console.log(`     - Is correction note: ${isCorrectionNote}`);
-        console.log(`     - Not reconciliation: ${isNotReconciliation}`);
-        console.log(`     - Match score: ${matchScore}/9`);
-
-        // If we find a perfect match (reference + batch + correction note)
-        if (
-          matchesReference &&
-          matchesBatch &&
-          isCorrectionNote &&
-          isNotReconciliation
-        ) {
-          correctionLedgerId = ledger.id;
-          matchedLedger = ledger;
-          console.log(`   ⭐ PERFECT MATCH FOUND!`);
-          break;
-        }
-
-        // Otherwise track the best match
-        if (matchScore > 5 && !correctionLedgerId) {
-          correctionLedgerId = ledger.id;
-          matchedLedger = ledger;
-          console.log(`   📍 Good match found (score: ${matchScore})`);
-        }
-      }
-
-      // Delete the matched ledger if found
-      if (correctionLedgerId && matchedLedger) {
-        console.log(`\n✅ Found matching correction ledger:`);
-        console.log(`   ID: ${correctionLedgerId}`);
-        console.log(`   Notes: ${matchedLedger.notes}`);
-        console.log(`   Reference: ${matchedLedger.reference}`);
-
-        await tx.stockLedger.delete({
-          where: { id: correctionLedgerId },
-        });
-        console.log(`✅ Deleted correction ledger: ${correctionLedgerId}`);
-      } else {
-        console.log('⚠️ No matching correction ledger found to delete');
-
-        // Debug: Show all ledgers that might be related
-        console.log('\n🔍 Debug: All ledgers with reference', targetReference);
-        const refLedgers = potentialLedgers.filter(
-          (l) => l.reference === targetReference,
-        );
-        refLedgers.forEach((ledger, i) => {
-          console.log(
-            `  ${i + 1}. ${ledger.id}: ${ledger.notes.substring(0, 60)}...`,
-          );
-        });
-      }
-
-      // Process each correction item for stock reversal
-      correctionItemsWithBatches.forEach((item) => {
-        if (
-          existingSellStockCorrection.status === 'PARTIAL' &&
-          item.itemSaleStatus !== 'DELIVERED'
-        ) {
-          console.log(
-            `⏭️ Skipping non-delivered item ${item.id} for partial correction`,
-          );
-          return;
-        }
-
+      // Calculate net total adjustment
+      correctionItems.forEach((item) => {
         const originalQuantity = item.quantity;
         const isAddition = originalQuantity > 0;
         const absoluteQuantity = Math.abs(originalQuantity);
-
-        console.log(`\n  📊 Processing item ${item.id}:`, {
-          originalQuantity,
-          isAddition,
-          absoluteQuantity,
-          shopId: item.shopId,
-          itemSaleStatus: item.itemSaleStatus,
-        });
 
         if (sell) {
           if (isAddition) {
             const itemValueAdjustment = absoluteQuantity * item.unitPrice;
             netTotalAdjustment -= itemValueAdjustment;
             console.log(
-              `    Net total adjustment: -${itemValueAdjustment} (reverse addition)`,
+              `  Item ${item.id}: -${itemValueAdjustment} (reverse addition)`,
             );
           } else {
             const sellItem = sell.items.find(
@@ -1276,45 +1476,13 @@ const deleteSellStockCorrection = async (id, userId) => {
             const itemValueAdjustment = absoluteQuantity * priceToUse;
             netTotalAdjustment += itemValueAdjustment;
             console.log(
-              `    Net total adjustment: +${itemValueAdjustment} (reverse subtraction)`,
+              `  Item ${item.id}: +${itemValueAdjustment} (reverse subtraction)`,
             );
           }
         }
-
-        if (item.batches && item.batches.length > 0) {
-          console.log(`    Item has ${item.batches.length} batches`);
-
-          item.batches.forEach((correctionBatch) => {
-            const batchQuantity = Math.abs(correctionBatch.quantity);
-            const { batchId } = correctionBatch;
-
-            if (item.shopId) {
-              console.log(`    Reversing batch ${batchId}:`, {
-                action: isAddition ? 'decrement' : 'increment',
-                quantity: batchQuantity,
-              });
-
-              reversalOperations.push(
-                tx.shopStock.update({
-                  where: {
-                    shopId_batchId: {
-                      shopId: item.shopId,
-                      batchId,
-                    },
-                  },
-                  data: {
-                    quantity: isAddition
-                      ? { decrement: batchQuantity }
-                      : { increment: batchQuantity },
-                  },
-                }),
-              );
-            }
-          });
-        }
       });
 
-      // Reverse net total adjustment
+      // Update sell net total
       if (sell && netTotalAdjustment !== 0) {
         const newNetTotal = sell.NetTotal + netTotalAdjustment;
         const finalNetTotal = Math.max(0, newNetTotal);
@@ -1326,26 +1494,16 @@ const deleteSellStockCorrection = async (id, userId) => {
           final: finalNetTotal,
         });
 
-        reversalOperations.push(
-          tx.sell.update({
-            where: { id: sell.id },
-            data: {
-              NetTotal: finalNetTotal,
-              grandTotal: finalNetTotal,
-              updatedById: userId,
-              updatedAt: new Date(),
-            },
-          }),
-        );
-      }
-
-      // Execute all reversal operations
-      if (reversalOperations.length > 0) {
-        console.log(
-          `\n⚡ Executing ${reversalOperations.length} reversal operations...`,
-        );
-        await Promise.all(reversalOperations);
-        console.log('✅ All reversal operations completed');
+        await tx.sell.update({
+          where: { id: sell.id },
+          data: {
+            NetTotal: finalNetTotal,
+            grandTotal: finalNetTotal,
+            updatedById: userId,
+            updatedAt: new Date(),
+          },
+        });
+        console.log('✅ Sell net total updated');
       }
     }
 
@@ -1378,7 +1536,7 @@ const deleteSellStockCorrection = async (id, userId) => {
     } deleted`;
 
     if (['APPROVED', 'PARTIAL'].includes(existingSellStockCorrection.status)) {
-      logMessage += ` - Stock reversal completed`;
+      logMessage += ` - Net total adjustment completed`;
       if (netTotalAdjustment !== 0) {
         logMessage += `, Net total adjusted by ${netTotalAdjustment}`;
       }
@@ -1396,14 +1554,13 @@ const deleteSellStockCorrection = async (id, userId) => {
 
     return {
       message: `Sell stock correction deleted successfully`,
-      reversalPerformed: ['APPROVED', 'PARTIAL'].includes(
+      adjustmentPerformed: ['APPROVED', 'PARTIAL'].includes(
         existingSellStockCorrection.status,
       ),
       netTotalAdjustment: netTotalAdjustment || 0,
     };
   });
 };
-// Reject SellStockCorrection
 const rejectSellStockCorrection = async (sellStockCorrectionId, userId) => {
   const sellStockCorrection = await getSellStockCorrectionById(
     sellStockCorrectionId,
