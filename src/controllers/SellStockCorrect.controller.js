@@ -8,7 +8,7 @@ const createSellStockCorrection = catchAsync(async (req, res) => {
   const sellStockCorrection =
     await sellStockCorrectionService.createSellStockCorrection(
       req.body,
-      'c0869bb9-e1e2-43e3-82aa-5b84997332cf',
+      req.user.id,
     );
   res.status(httpStatus.CREATED).send({
     success: true,
@@ -103,7 +103,7 @@ const approveSellStockCorrection = catchAsync(async (req, res) => {
   const sellStockCorrection =
     await sellStockCorrectionService.approveSellStockCorrection(
       req.params.id,
-      '0d0f65fe-d2c2-46f9-b787-e2164f8a773c',
+      req.user.id,
       deliveredItemIds || [], // Pass the deliveredItemIds array from request body
     );
 
