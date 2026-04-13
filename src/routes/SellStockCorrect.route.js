@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const { sellStockCorrectionController } = require('../controllers');
 const auth = require('../middlewares/auth');
-const checkPermission = require('../middlewares/permission.middleware');
+// const checkPermission = require('../middlewares/permission.middleware');
 
 // const checkPermission = require('../middlewares/permission.middleware');
 
@@ -11,7 +11,7 @@ const checkPermission = require('../middlewares/permission.middleware');
 router.post(
   '/api/sell-stock-corrections',
   auth,
-  checkPermission('CREATE_SELL_STOCK_CORRECTION'),
+  // checkPermission('CREATE_SELL_STOCK_CORRECTION'),
   sellStockCorrectionController.createSellStockCorrection,
 );
 
@@ -77,7 +77,7 @@ router.put(
 router.patch(
   '/api/sell-stock-corrections/:id/approve',
   auth,
-  checkPermission('APPROVE_SELL_STOCK_CORRECTION'),
+  // checkPermission('APPROVE_SELL_STOCK_CORRECTION'),
   sellStockCorrectionController.approveSellStockCorrection,
 );
 
@@ -85,7 +85,7 @@ router.patch(
 router.patch(
   '/api/sell-stock-corrections/:id/reject',
   auth,
-  checkPermission('REJECT_SELL_STOCK_CORRECTION'),
+  // checkPermission('REJECT_SELL_STOCK_CORRECTION'),
   sellStockCorrectionController.rejectSellStockCorrection,
 );
 
@@ -93,7 +93,7 @@ router.patch(
 router.delete(
   '/api/sell-stock-corrections/:id',
   auth,
-  checkPermission('DELETE_SELL_STOCK_CORRECTION'),
+  // checkPermission('DELETE_SELL_STOCK_CORRECTION'),
   sellStockCorrectionController.deleteSellStockCorrection,
 );
 

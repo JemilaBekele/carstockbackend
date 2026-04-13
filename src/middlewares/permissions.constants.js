@@ -145,39 +145,6 @@ module.exports = {
     },
     DELETE: { name: 'DELETE_CATEGORY', description: 'Delete categories' },
   },
-  SUBCATEGORY: {
-    CREATE: {
-      name: 'CREATE_SUBCATEGORY',
-      description: 'Create new subcategories',
-    },
-    VIEW_ALL: {
-      name: 'VIEW_ALL_SUBCATEGORIES',
-      description: 'View all subcategories',
-    },
-    UPDATE: {
-      name: 'UPDATE_SUBCATEGORY',
-      description: 'Update subcategory information',
-    },
-    DELETE: { name: 'DELETE_SUBCATEGORY', description: 'Delete subcategories' },
-  },
-  UNIT_OF_MEASURE: {
-    CREATE: {
-      name: 'CREATE_UNIT_OF_MEASURE',
-      description: 'Create new unit of measure',
-    },
-    VIEW_ALL: {
-      name: 'VIEW_ALL_UNIT_OF_MEASURE',
-      description: 'View all unit of measure',
-    },
-    UPDATE: {
-      name: 'UPDATE_UNIT_OF_MEASURE',
-      description: 'Update unit of measure information',
-    },
-    DELETE: {
-      name: 'DELETE_UNIT_OF_MEASURE',
-      description: 'Delete unit of measure',
-    },
-  },
   PRODUCT: {
     VIEW_DASHBOARD: {
       name: 'VIEW_PRODUCT_DASHBOARD',
@@ -208,28 +175,7 @@ module.exports = {
       description: 'View product details',
     },
   },
-  PRODUCT_BATCH: {
-    CREATE: {
-      name: 'CREATE_PRODUCT_BATCH',
-      description: 'Create a new product batch',
-    },
-    VIEW_ALL: {
-      name: 'VIEW_ALL_PRODUCT_BATCHES',
-      description: 'View all product batches',
-    },
-    VIEW: {
-      name: 'VIEW_PRODUCT_BATCHES',
-      description: 'View detail product batches',
-    },
-    UPDATE: {
-      name: 'UPDATE_PRODUCT_BATCH',
-      description: 'Update details of a product batch',
-    },
-    DELETE: {
-      name: 'DELETE_PRODUCT_BATCH',
-      description: 'Delete a product batch',
-    },
-  },
+
 
   TRANSFER: {
     CREATE: {
@@ -330,28 +276,6 @@ module.exports = {
     CANCEL: {
       name: 'CANCEL_SELL',
       description: 'Cancel a sell record',
-    },
-  },
-  SELL_STOCK_CORRECTION: {
-    CREATE: {
-      name: 'CREATE_SELL_STOCK_CORRECTION',
-      description: 'Create new sell stock corrections',
-    },
-    APPROVE: {
-      name: 'APPROVE_SELL_STOCK_CORRECTION',
-      description: 'Approve sell stock corrections',
-    },
-    MARK_AS_CHECKED: {
-      name: 'MARK_AS_CHECKED_SELL_STOCK_CORRECTION',
-      description: 'Mark sell stock corrections as checked',
-    },
-    REJECT: {
-      name: 'REJECT_SELL_STOCK_CORRECTION',
-      description: 'Reject sell stock corrections',
-    },
-    DELETE: {
-      name: 'DELETE_SELL_STOCK_CORRECTION',
-      description: 'Delete sell stock corrections',
     },
   },
   INVENTORY_DASHBOARD: {
