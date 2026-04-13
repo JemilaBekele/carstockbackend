@@ -10,19 +10,21 @@ const getProductById = async (id) => {
     where: { id },
     include: {
       category: true,
-      subCategory: true,
-      batches: true,
-      unitOfMeasure: true,
+      brand: true,
       AdditionalPrice: {
-        // ✅ Include additional prices
         include: {
-          shop: true,
+          shop: {
+            include: {
+              branch: true,
+            },
+          },
         },
       },
     },
   });
   return product;
 };
+
 const getAllProducts = async (userId) => {
   // First, get the user with their accessible shops and stores
   const user = await prisma.user.findUnique({
@@ -85,27 +87,6 @@ const getAllProducts = async (userId) => {
     stores.map((store) => [store.id, store.name]),
   );
 
-  // Create maps for shop and store branch info
-  // const shopBranchMap = Object.fromEntries(
-  //   shops.map((shop) => [
-  //     shop.id,
-  //     {
-  //       branchId: shop.branch?.id,
-  //       branchName: shop.branch?.name,
-  //     },
-  //   ]),
-  // );
-
-  // const storeBranchMap = Object.fromEntries(
-  //   stores.map((store) => [
-  //     store.id,
-  //     {
-  //       branchId: store.branch?.id,
-  //       branchName: store.branch?.name,
-  //     },
-  //   ]),
-  // );
-
   // Get all products with their stock information
   const products = await prisma.product.findMany({
     orderBy: {
@@ -113,36 +94,31 @@ const getAllProducts = async (userId) => {
     },
     include: {
       category: true,
-      subCategory: true,
-      unitOfMeasure: true,
+      brand: true,
       AdditionalPrice: {
         include: {
           shop: true,
         },
       },
-      batches: {
+      shopStocks: {
+        where: {
+          status: 'Available',
+          shopId: { in: accessibleShopIds },
+        },
         include: {
-          ShopStock: {
-            where: {
-              status: 'Available',
-              shopId: { in: accessibleShopIds }, // Filter by accessible shops
-            },
-            include: {
-              shop: {
-                select: { id: true, name: true },
-              },
-            },
+          shop: {
+            select: { id: true, name: true, branch: true },
           },
-          StoreStock: {
-            where: {
-              status: 'Available',
-              storeId: { in: accessibleStoreIds }, // Filter by accessible stores
-            },
-            include: {
-              store: {
-                select: { id: true, name: true },
-              },
-            },
+        },
+      },
+      storeStocks: {
+        where: {
+          status: 'Available',
+          storeId: { in: accessibleStoreIds },
+        },
+        include: {
+          store: {
+            select: { id: true, name: true, branch: true },
           },
         },
       },
@@ -167,35 +143,27 @@ const getAllProducts = async (userId) => {
       storeStocks[store.name] = 0;
     });
 
-    // Calculate stock from all batches
-    product.batches.forEach((batch) => {
-      // Process shop stock
-      batch.ShopStock.forEach((shopStock) => {
-        const shopName = shopMap[shopStock.shopId];
-        if (shopName) {
-          // Only count if shop is accessible
-          shopStocks[shopName] =
-            (shopStocks[shopName] || 0) + shopStock.quantity;
-          totalShopStock += shopStock.quantity;
-        }
-      });
+    // Process shop stock
+    product.shopStocks.forEach((stock) => {
+      const shopName = shopMap[stock.shopId];
+      if (shopName) {
+        shopStocks[shopName] = (shopStocks[shopName] || 0) + stock.quantity;
+        totalShopStock += stock.quantity;
+      }
+    });
 
-      // Process store stock
-      batch.StoreStock.forEach((storeStock) => {
-        const storeName = storeMap[storeStock.storeId];
-        if (storeName) {
-          // Only count if store is accessible
-          storeStocks[storeName] =
-            (storeStocks[storeName] || 0) + storeStock.quantity;
-          totalStoreStock += storeStock.quantity;
-        }
-      });
+    // Process store stock
+    product.storeStocks.forEach((stock) => {
+      const storeName = storeMap[stock.storeId];
+      if (storeName) {
+        storeStocks[storeName] = (storeStocks[storeName] || 0) + stock.quantity;
+        totalStoreStock += stock.quantity;
+      }
     });
 
     // Convert shopStocks to include branch info
     const shopStocksWithBranch = {};
     Object.entries(shopStocks).forEach(([shopName, quantity]) => {
-      // Find the shop to get branch info
       const shop = shops.find((s) => s.name === shopName);
       if (shop) {
         shopStocksWithBranch[shopName] = {
@@ -209,7 +177,6 @@ const getAllProducts = async (userId) => {
     // Convert storeStocks to include branch info
     const storeStocksWithBranch = {};
     Object.entries(storeStocks).forEach(([storeName, quantity]) => {
-      // Find the store to get branch info
       const store = stores.find((s) => s.name === storeName);
       if (store) {
         storeStocksWithBranch[storeName] = {
@@ -225,8 +192,8 @@ const getAllProducts = async (userId) => {
     return {
       ...product,
       stockSummary: {
-        shopStocks: shopStocksWithBranch, // Object with shop names as keys and { quantity, branchId, branchName } as values
-        storeStocks: storeStocksWithBranch, // Object with store names as keys and { quantity, branchId, branchName } as values
+        shopStocks: shopStocksWithBranch,
+        storeStocks: storeStocksWithBranch,
         totalShopStock,
         totalStoreStock,
         totalStock,
@@ -285,6 +252,7 @@ const getAllProducts = async (userId) => {
     count: products.length,
   };
 };
+
 const getActiveAllProducts = async (filter = {}, includeInactive = false) => {
   const whereClause = includeInactive ? filter : { ...filter, isActive: true };
 
@@ -293,8 +261,7 @@ const getActiveAllProducts = async (filter = {}, includeInactive = false) => {
     orderBy: { name: 'asc' },
     include: {
       category: true,
-      subCategory: true,
-      unitOfMeasure: true,
+      brand: true,
     },
   });
 
@@ -312,34 +279,49 @@ const getProductByCode = async (productCode) => {
   return product;
 };
 
-const getBatchesByProduct = async (productId) => {
-  const batches = await prisma.productBatch.findMany({
-    where: {
-      productId, // Filter by the provided productId
-    },
-    orderBy: [
-      { expiryDate: 'asc' }, // Sort by expiry date (earliest first)
-      { batchNumber: 'asc' },
-    ],
-    include: {
-      product: true,
-      store: true,
-    },
+// Note: ProductBatch doesn't exist in your schema, so this function is removed
+// const getBatchesByProduct = async (productId) => { ... };
+
+const generateUniqueProductCode = async () => {
+  const prefix = 'PROD';
+  const maxAttempts = 10;
+  let productCode;
+
+  const codeAttempts = Array.from({ length: maxAttempts }, () => {
+    const randomNumber = Math.floor(10000 + Math.random() * 90000);
+    return `${prefix}-${randomNumber}`;
   });
-  return {
-    batches,
-    count: batches.length,
-  };
+
+  const existingProducts = await Promise.all(
+    codeAttempts.map((code) => getProductByCode(code)),
+  );
+
+  const uniqueCodeIndex = existingProducts.findIndex((product) => !product);
+
+  if (uniqueCodeIndex !== -1) {
+    productCode = codeAttempts[uniqueCodeIndex];
+  } else {
+    const timestamp = Date.now();
+    productCode = `${prefix}-${timestamp}`;
+  }
+
+  return productCode;
 };
 
-const generateBatchNumber = () => {
-  const date = new Date();
-  const year = date.getFullYear().toString().slice(-2);
-  const month = (date.getMonth() + 1).toString().padStart(2, '0');
-  const day = date.getDate().toString().padStart(2, '0');
-  const random = Math.floor(1000 + Math.random() * 9000);
-  return `BATCH-${year}${month}${day}-${random}`;
+const getProductByName = async (productName) => {
+  if (!productName || productName.trim() === '') {
+    return null;
+  }
+
+  return prisma.product.findFirst({
+    where: {
+      name: {
+        equals: productName,
+      },
+    },
+  });
 };
+
 const parseFormData = (data) => {
   const parsed = { ...data };
 
@@ -359,399 +341,395 @@ const parseFormData = (data) => {
     parsed.sellPrice = null;
   }
 
+  // Handle boxSize
+  if (parsed.boxSize !== undefined && parsed.boxSize !== '') {
+    parsed.boxSize = parseInt(parsed.boxSize, 10);
+  } else if (parsed.boxSize === '') {
+    parsed.boxSize = null;
+  }
+
   return parsed;
 };
-const generateUniqueProductCode = async () => {
-  const prefix = 'PROD'; // You can customize this prefix
-  const maxAttempts = 10;
-  let productCode;
 
-  // Generate multiple codes at once and check them in a single query
-  const codeAttempts = Array.from({ length: maxAttempts }, () => {
-    const randomNumber = Math.floor(10000 + Math.random() * 90000); // 5-digit random number
-    return `${prefix}-${randomNumber}`;
-  });
-
-  // Check all codes at once
-  const existingProducts = await Promise.all(
-    codeAttempts.map((code) => getProductByCode(code)),
-  );
-
-  // Find the first unique code
-  const uniqueCodeIndex = existingProducts.findIndex((product) => !product);
-
-  if (uniqueCodeIndex !== -1) {
-    productCode = codeAttempts[uniqueCodeIndex];
-  } else {
-    // Fallback: use timestamp for uniqueness
-    const timestamp = Date.now();
-    productCode = `${prefix}-${timestamp}`;
-  }
-
-  return productCode;
-};
-const getProductByName = async (productName) => {
-  if (!productName || productName.trim() === '') {
-    return null;
-  }
-
-  return prisma.product.findFirst({
-    where: {
-      name: {
-        equals: productName,
-      },
-    },
-  });
-};
 const createProduct = async (productBody, files) => {
-  // Generate product code if not provided
-  let { productCode } = productBody;
-  const { name } = productBody;
+  try {
+    console.log('=== createProduct START ===');
+    console.log('productBody:', JSON.stringify(productBody, null, 2));
+    console.log(
+      'files:',
+      files
+        ? files.image
+          ? 'Image file present'
+          : 'No image file'
+        : 'No files object',
+    );
 
-  if (!productCode || productCode.trim() === '') {
-    productCode = await generateUniqueProductCode();
-  }
+    // Generate product code if not provided
+    let { productCode } = productBody;
+    const { name } = productBody;
 
-  // Check if product with same code already exists
-  if (await getProductByCode(productCode)) {
-    throw new ApiError(httpStatus.BAD_REQUEST, 'Product code already taken');
-  }
-  if (await getProductByName(name)) {
-    throw new ApiError(httpStatus.BAD_REQUEST, 'Product name already exists');
-  }
-  const parsedData = parseFormData(productBody);
-  parsedData.productCode = productCode; // Add generated code to parsed data
+    console.log('Processing productCode:', productCode);
+    console.log('Processing name:', name);
 
-  let imageUrl = null;
-
-  // Process the product image if provided
-  const imageFile = Array.isArray(files?.image) ? files.image[0] : files?.image;
-
-  if (imageFile) {
-    try {
-      imageUrl = await uploadImage(imageFile, 'product_images');
-    } catch (err) {
-      throw new ApiError(
-        httpStatus.INTERNAL_SERVER_ERROR,
-        'Product image processing failed',
-      );
+    if (!productCode || productCode.trim() === '') {
+      console.log('Generating new product code...');
+      productCode = await generateUniqueProductCode();
+      console.log('Generated product code:', productCode);
     }
-  }
-  const { additionalPrices, ...productData } = parsedData;
 
-  // Create product
-  const product = await prisma.product.create({
-    data: {
-      ...productData,
-      imageUrl: imageUrl || parsedData.imageUrl || '',
-      AdditionalPrice:
-        additionalPrices && additionalPrices.length > 0
-          ? {
-              create: additionalPrices.map((price) => ({
-                label: price.label,
-                price: parseFloat(price.price),
-                shopId: price.shopId || null,
-              })),
-            }
-          : undefined,
-    },
-    include: {
-      unitOfMeasure: true, // ✅ Added unit of measure
-    },
-  });
+    // Check if product with same code already exists
+    console.log('Checking if product code exists:', productCode);
+    const existingProductByCode = await getProductByCode(productCode);
+    if (existingProductByCode) {
+      console.error('Product code already exists:', productCode);
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Product code already taken');
+    }
 
-  return product;
-};
-const generateUniqueBatchNumber = async () => {
-  const maxAttempts = 10;
+    // Check if product with same name already exists
+    console.log('Checking if product name exists:', name);
+    const existingProductByName = await getProductByName(name);
+    if (existingProductByName) {
+      console.error('Product name already exists:', name);
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Product name already exists');
+    }
 
-  // Generate multiple batch numbers at once
-  const batchNumbers = Array.from({ length: maxAttempts }, () =>
-    generateBatchNumber(),
-  );
+    console.log('Parsing form data...');
+    const parsedData = parseFormData(productBody);
+    console.log(
+      'Parsed data (before conversion):',
+      JSON.stringify(parsedData, null, 2),
+    );
 
-  // Check which batch numbers already exist
-  const existingBatches = await prisma.productBatch.findMany({
-    where: {
-      batchNumber: {
-        in: batchNumbers,
+    // Convert string boolean values to actual booleans
+    if (parsedData.hasBox !== undefined) {
+      parsedData.hasBox =
+        parsedData.hasBox === 'true' || parsedData.hasBox === true;
+      console.log('Converted hasBox to:', parsedData.hasBox);
+    }
+
+    if (parsedData.isActive !== undefined) {
+      parsedData.isActive =
+        parsedData.isActive === 'true' || parsedData.isActive === true;
+      console.log('Converted isActive to:', parsedData.isActive);
+    }
+
+    // Convert numeric strings to numbers
+    if (
+      parsedData.boxSize !== undefined &&
+      parsedData.boxSize !== null &&
+      parsedData.boxSize !== ''
+    ) {
+      parsedData.boxSize = parseInt(parsedData.boxSize);
+      console.log('Converted boxSize to:', parsedData.boxSize);
+    }
+
+    if (
+      parsedData.sellPrice !== undefined &&
+      parsedData.sellPrice !== null &&
+      parsedData.sellPrice !== ''
+    ) {
+      parsedData.sellPrice = parseFloat(parsedData.sellPrice);
+      console.log('Converted sellPrice to:', parsedData.sellPrice);
+    }
+
+    parsedData.productCode = productCode;
+
+    let imageUrl = '';
+
+    // Process the product image if provided
+    const imageFile = Array.isArray(files?.image)
+      ? files.image[0]
+      : files?.image;
+
+    if (imageFile) {
+      console.log('Processing image file:', {
+        originalname: imageFile.originalname,
+        mimetype: imageFile.mimetype,
+        size: imageFile.size,
+      });
+      try {
+        imageUrl = await uploadImage(imageFile, 'product_images');
+        console.log('Image uploaded successfully. URL:', imageUrl);
+      } catch (err) {
+        console.error('Image upload failed:', err);
+        throw new ApiError(
+          httpStatus.INTERNAL_SERVER_ERROR,
+          'Product image processing failed',
+        );
+      }
+    } else {
+      console.log('No image file provided');
+    }
+
+    const { additionalPrices, ...productData } = parsedData;
+    console.log(
+      'Product data (after conversion):',
+      JSON.stringify(productData, null, 2),
+    );
+    console.log('Additional prices:', additionalPrices);
+
+    // Prepare additional prices data
+    let additionalPricesData;
+    if (additionalPrices && additionalPrices.length > 0) {
+      console.log(`Processing ${additionalPrices.length} additional prices...`);
+      additionalPricesData = {
+        create: additionalPrices.map((price, index) => {
+          const priceData = {
+            label: price.label,
+            price:
+              typeof price.price === 'string'
+                ? parseFloat(price.price)
+                : price.price,
+            shopId: price.shopId || null,
+          };
+          console.log(`Additional price ${index + 1}:`, priceData);
+          return priceData;
+        }),
+      };
+    }
+
+    // Create product
+    console.log('Creating product in database...');
+    const product = await prisma.product.create({
+      data: {
+        ...productData,
+        imageUrl: imageUrl || parsedData.imageUrl || '',
+        AdditionalPrice: additionalPricesData,
       },
-    },
-    select: {
-      batchNumber: true,
-    },
-  });
+      include: {
+        category: true,
+        brand: true,
+        AdditionalPrice: true,
+      },
+    });
 
-  const existingBatchNumbers = new Set(
-    existingBatches.map((batch) => batch.batchNumber),
-  );
+    console.log('Product created successfully. ID:', product.id);
+    console.log('=== createProduct END ===');
 
-  // Find the first unique batch number
-  const uniqueBatchNumber = batchNumbers.find(
-    (number) => !existingBatchNumbers.has(number),
-  );
+    return product;
+  } catch (error) {
+    console.error('=== createProduct ERROR ===');
+    console.error('Error type:', error.constructor.name);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
 
-  if (!uniqueBatchNumber) {
+    // Log Prisma-specific error details
+    if (error.code) {
+      console.error('Prisma error code:', error.code);
+    }
+    if (error.meta) {
+      console.error('Prisma error meta:', error.meta);
+    }
+
+    // Log validation errors
+    if (error.name === 'ValidationError') {
+      console.error('Validation errors:', error.errors);
+    }
+
+    // Re-throw the error if it's already an ApiError
+    if (error instanceof ApiError) {
+      throw error;
+    }
+
+    // Throw a generic error for unexpected errors
     throw new ApiError(
       httpStatus.INTERNAL_SERVER_ERROR,
-      'Failed to generate unique batch number after multiple attempts',
+      `Failed to create product: ${error.message}`,
     );
   }
-
-  return uniqueBatchNumber;
-};
-const createProductBatch = async (productId, batchesData, userId) => {
-  // Validate input
-  if (!productId || !batchesData || !Array.isArray(batchesData)) {
-    throw new ApiError(
-      httpStatus.BAD_REQUEST,
-      'Product ID and batches data array are required',
-    );
-  }
-
-  if (batchesData.length === 0) {
-    throw new ApiError(
-      httpStatus.BAD_REQUEST,
-      'At least one batch data is required',
-    );
-  }
-
-  // Get the product with its unit of measure
-  const product = await prisma.product.findUnique({
-    where: { id: productId },
-    include: {
-      unitOfMeasure: true,
-    },
-  });
-
-  if (!product) {
-    throw new ApiError(httpStatus.NOT_FOUND, 'Product not found');
-  }
-
-  // Use the product's unit of measure ID
-  const { unitOfMeasureId } = product;
-
-  // Verify the product's unit of measure exists
-  const unitOfMeasure = await prisma.unitOfMeasure.findUnique({
-    where: { id: unitOfMeasureId },
-  });
-
-  if (!unitOfMeasure) {
-    throw new ApiError(
-      httpStatus.BAD_REQUEST,
-      'Invalid unit of measure for this product',
-    );
-  }
-
-  // Check for duplicate batch numbers in the request
-  const batchNumbersInRequest = batchesData
-    .filter((batch) => batch.batchNumber)
-    .map((batch) => batch.batchNumber);
-
-  const uniqueBatchNumbers = [...new Set(batchNumbersInRequest)];
-  if (batchNumbersInRequest.length !== uniqueBatchNumbers.length) {
-    throw new ApiError(
-      httpStatus.BAD_REQUEST,
-      'Duplicate batch numbers found in the request',
-    );
-  }
-
-  // Check for existing batch numbers in the database
-  const existingBatches = await prisma.productBatch.findMany({
-    where: {
-      batchNumber: {
-        in: batchNumbersInRequest,
-      },
-    },
-    select: {
-      batchNumber: true,
-    },
-  });
-
-  if (existingBatches.length > 0) {
-    const existingBatchNumbers = existingBatches.map(
-      (batch) => batch.batchNumber,
-    );
-    throw new ApiError(
-      httpStatus.BAD_REQUEST,
-      `Batch numbers already exist: ${existingBatchNumbers.join(', ')}`,
-    );
-  }
-
-  // Process all batches in parallel
-  const createdBatches = await Promise.all(
-    batchesData.map(async (batchData) => {
-      // Validate individual batch data
-      if (!batchData) {
-        throw new ApiError(
-          httpStatus.BAD_REQUEST,
-          'Each batch data object is required',
-        );
-      }
-
-      // Generate batch number if not provided
-      const batchNumber =
-        batchData.batchNumber || (await generateUniqueBatchNumber());
-
-      // Create the product batch
-      const productBatch = await prisma.productBatch.create({
-        data: {
-          batchNumber,
-          expiryDate: batchData.expiryDate
-            ? new Date(batchData.expiryDate).toISOString()
-            : null,
-          price: batchData.price || 0,
-          stock: batchData.stock || 0,
-          warningQuantity: batchData.warningQuantity || 0,
-          productId,
-          storeId: batchData.storeId,
-        },
-        include: {
-          product: {
-            include: {
-              unitOfMeasure: true,
-            },
-          },
-        },
-      });
-
-      // Create stock operations for batches with stock
-      const stockOperations = [];
-
-      if (batchData.stock > 0) {
-        // Stock ledger entry
-        stockOperations.push(
-          prisma.stockLedger.create({
-            data: {
-              batchId: productBatch.id,
-              storeId: batchData.storeId,
-              movementType: 'IN',
-              quantity: batchData.stock,
-              unitOfMeasureId,
-              reference:
-                batchData.reference || `BATCH-${productBatch.batchNumber}`,
-              userId,
-              notes: `Initial stock creation for batch ${productBatch.batchNumber}`,
-              movementDate: new Date(),
-            },
-          }),
-        );
-
-        // Store stock operation if storeId is provided
-        if (batchData.storeId) {
-          stockOperations.push(
-            prisma.storeStock.upsert({
-              where: {
-                storeId_batchId: {
-                  storeId: batchData.storeId,
-                  batchId: productBatch.id,
-                },
-              },
-              create: {
-                storeId: batchData.storeId,
-                batchId: productBatch.id,
-                quantity: batchData.stock,
-                status: 'Available',
-                unitOfMeasureId,
-              },
-              update: {
-                quantity: {
-                  increment: batchData.stock,
-                },
-              },
-            }),
-          );
-        }
-      }
-
-      // Execute all stock operations in parallel
-      if (stockOperations.length > 0) {
-        await Promise.all(stockOperations);
-      }
-
-      return productBatch;
-    }),
-  );
-
-  return createdBatches;
 };
 
 const updateProduct = async (id, updateBody, files) => {
-  const existingProduct = await getProductById(id);
-  if (!existingProduct) {
-    throw new ApiError(httpStatus.NOT_FOUND, 'Product not found');
-  }
+  console.log('=== updateProduct START ===');
+  console.log('Product ID:', id);
+  console.log('Update Body:', JSON.stringify(updateBody, null, 2));
+  console.log(
+    'Files:',
+    files
+      ? files.image
+        ? 'Image file present'
+        : 'No image file'
+      : 'No files object',
+  );
 
-  // Check if product code is being updated to an existing product code
-  if (
-    updateBody.productCode &&
-    updateBody.productCode !== existingProduct.productCode
-  ) {
-    if (await getProductByCode(updateBody.productCode)) {
-      throw new ApiError(httpStatus.BAD_REQUEST, 'Product code already taken');
+  try {
+    const existingProduct = await getProductById(id);
+    console.log('Existing product found:', existingProduct ? 'Yes' : 'No');
+
+    if (!existingProduct) {
+      console.error('Product not found:', id);
+      throw new ApiError(httpStatus.NOT_FOUND, 'Product not found');
     }
-  }
 
-  const parsedData = parseFormData(updateBody);
-  let { imageUrl } = existingProduct;
-
-  // Process the product image if provided
-  const imageFile = Array.isArray(files?.image) ? files.image[0] : files?.image;
-
-  if (imageFile) {
-    try {
-      imageUrl = await uploadImage(imageFile, 'product_images');
-    } catch (err) {
-      throw new ApiError(
-        httpStatus.INTERNAL_SERVER_ERROR,
-        'Product image processing failed',
+    // Check if product code is being updated to an existing product code
+    if (
+      updateBody.productCode &&
+      updateBody.productCode !== existingProduct.productCode
+    ) {
+      console.log(
+        'Checking if product code already exists:',
+        updateBody.productCode,
       );
+      const existingProductByCode = await getProductByCode(
+        updateBody.productCode,
+      );
+      if (existingProductByCode) {
+        console.error('Product code already taken:', updateBody.productCode);
+        throw new ApiError(
+          httpStatus.BAD_REQUEST,
+          'Product code already taken',
+        );
+      }
+      console.log('Product code is available');
     }
-  }
 
-  const { additionalPrices, ...productData } = parsedData;
+    console.log('Parsing form data...');
+    const parsedData = parseFormData(updateBody);
+    console.log('Parsed data:', JSON.stringify(parsedData, null, 2));
 
-  // Prepare the update data
-  const updateData = {
-    ...productData,
-    imageUrl,
-    // Convert string 'true'/'false' to boolean
-    isActive: productData.isActive === 'true' || productData.isActive === true,
-    // Convert sellPrice from string to number if needed
-    sellPrice: productData.sellPrice ? parseFloat(productData.sellPrice) : null,
-  };
+    let { imageUrl } = existingProduct;
+    console.log('Current image URL:', imageUrl);
 
-  // Handle additional prices update
-  if (additionalPrices !== undefined) {
-    // First, delete existing additional prices for this product
-    await prisma.additionalPrice.deleteMany({
-      where: { productId: id },
+    // Process the product image if provided
+    const imageFile = Array.isArray(files?.image)
+      ? files.image[0]
+      : files?.image;
+
+    if (imageFile) {
+      console.log('Processing image file:', {
+        originalname: imageFile.originalname,
+        mimetype: imageFile.mimetype,
+        size: imageFile.size,
+      });
+      try {
+        imageUrl = await uploadImage(imageFile, 'product_images');
+        console.log('Image uploaded successfully. New URL:', imageUrl);
+      } catch (err) {
+        console.error('Image upload failed:', err);
+        throw new ApiError(
+          httpStatus.INTERNAL_SERVER_ERROR,
+          'Product image processing failed',
+        );
+      }
+    } else {
+      console.log('No new image file provided, keeping existing image');
+    }
+
+    const { additionalPrices, ...productData } = parsedData;
+    console.log(
+      'Product data (without additional prices):',
+      JSON.stringify(productData, null, 2),
+    );
+    console.log('Additional prices:', additionalPrices);
+
+    // Prepare the update data
+    const updateData = {
+      ...productData,
+      imageUrl,
+      isActive:
+        productData.isActive === 'true' || productData.isActive === true,
+      sellPrice: productData.sellPrice
+        ? parseFloat(productData.sellPrice)
+        : null,
+    };
+
+    // Handle hasBox and boxSize conversion
+    if (productData.hasBox !== undefined) {
+      updateData.hasBox =
+        productData.hasBox === 'true' || productData.hasBox === true;
+      console.log('Converted hasBox to:', updateData.hasBox);
+    }
+
+    if (
+      productData.boxSize !== undefined &&
+      productData.boxSize !== null &&
+      productData.boxSize !== ''
+    ) {
+      updateData.boxSize = parseInt(productData.boxSize);
+      console.log('Converted boxSize to:', updateData.boxSize);
+    }
+
+    console.log('Final update data:', JSON.stringify(updateData, null, 2));
+
+    // Handle additional prices update
+    if (additionalPrices !== undefined) {
+      console.log('Processing additional prices update...');
+
+      // First, delete existing additional prices for this product
+      console.log('Deleting existing additional prices for product:', id);
+      const deleteResult = await prisma.additionalPrice.deleteMany({
+        where: { productId: id },
+      });
+      console.log(`Deleted ${deleteResult.count} existing additional prices`);
+
+      // Then create new ones if provided
+      if (additionalPrices && additionalPrices.length > 0) {
+        console.log(
+          `Creating ${additionalPrices.length} new additional prices...`,
+        );
+        const processedPrices = additionalPrices.map((price, index) => {
+          const priceData = {
+            label: price.label,
+            price: parseFloat(price.price),
+            shopId: price.shopId || null,
+          };
+          console.log(`Additional price ${index + 1}:`, priceData);
+          return priceData;
+        });
+
+        updateData.AdditionalPrice = {
+          create: processedPrices,
+        };
+      } else {
+        console.log('No additional prices to create');
+      }
+    }
+
+    console.log('Updating product in database...');
+    const updatedProduct = await prisma.product.update({
+      where: { id },
+      data: updateData,
+      include: {
+        category: true,
+        brand: true,
+        AdditionalPrice: true,
+      },
     });
 
-    // Then create new ones if provided
-    if (additionalPrices && additionalPrices.length > 0) {
-      updateData.AdditionalPrice = {
-        create: additionalPrices.map((price) => ({
-          label: price.label,
-          price: parseFloat(price.price),
-          shopId: price.shopId || null,
-        })),
-      };
+    console.log('Product updated successfully. ID:', updatedProduct.id);
+    console.log('=== updateProduct END ===');
+
+    return updatedProduct;
+  } catch (error) {
+    console.error('=== updateProduct ERROR ===');
+    console.error('Error type:', error.constructor.name);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+
+    // Log Prisma-specific error details
+    if (error.code) {
+      console.error('Prisma error code:', error.code);
     }
+    if (error.meta) {
+      console.error('Prisma error meta:', error.meta);
+    }
+
+    // Log validation errors
+    if (error.name === 'ValidationError') {
+      console.error('Validation errors:', error.errors);
+    }
+
+    // Re-throw the error if it's already an ApiError
+    if (error instanceof ApiError) {
+      throw error;
+    }
+
+    // Throw a generic error for unexpected errors
+    throw new ApiError(
+      httpStatus.INTERNAL_SERVER_ERROR,
+      `Failed to update product: ${error.message}`,
+    );
   }
-
-  const updatedProduct = await prisma.product.update({
-    where: { id },
-    data: updateData,
-    include: {
-      category: true,
-      subCategory: true,
-      unitOfMeasure: true,
-      AdditionalPrice: true, // ✅ Include additional prices in response
-    },
-  });
-
-  return updatedProduct;
 };
 
 const deleteProduct = async (id) => {
@@ -765,9 +743,8 @@ const deleteProduct = async (id) => {
     where: { productId: id },
   });
 
-  await prisma.productBatch.deleteMany({
-    where: { productId: id },
-  });
+  // Note: Stock records (shopStocks, storeStocks) might need to be handled
+  // You may want to delete or transfer these stocks before deleting the product
 
   // Then delete the product
   await prisma.product.delete({
@@ -776,45 +753,7 @@ const deleteProduct = async (id) => {
 
   return { message: 'Product deleted successfully' };
 };
-const getProductBatchByBatchNumber = async (batchNumber) => {
-  const batch = await prisma.productBatch.findFirst({
-    where: {
-      batchNumber,
-    },
-  });
-  return !!batch;
-};
-const createProductBatchsingle = async (productBatchBody) => {
-  // Check if product batch with same batch number already exists
-  if (await getProductBatchByBatchNumber(productBatchBody.batchNumber)) {
-    throw new ApiError(httpStatus.BAD_REQUEST, 'Batch number already exists');
-  }
 
-  // Optional: Validate that the product exists
-  const product = await prisma.product.findUnique({
-    where: {
-      id: productBatchBody.productId,
-    },
-  });
-
-  if (!product) {
-    throw new ApiError(httpStatus.BAD_REQUEST, 'Product does not exist');
-  }
-
-  // Format the expiryDate if provided
-  const formattedData = {
-    ...productBatchBody,
-    expiryDate: productBatchBody.expiryDate
-      ? new Date(productBatchBody.expiryDate).toISOString()
-      : undefined,
-  };
-
-  const productBatch = await prisma.productBatch.create({
-    data: formattedData,
-  });
-
-  return productBatch;
-};
 const getProductDetails = async (productId, userId) => {
   try {
     // Get the user's accessible shops and stores
@@ -833,21 +772,6 @@ const getProductDetails = async (productId, userId) => {
     const accessibleShopIds = user.shops.map((shop) => shop.id);
     const accessibleStoreIds = user.stores.map((store) => store.id);
 
-    // If user has no shops or stores, return empty arrays
-    if (accessibleShopIds.length === 0 && accessibleStoreIds.length === 0) {
-      throw new Error('User has no shop or store access');
-    }
-
-    const shopStockWhere =
-      accessibleShopIds.length > 0
-        ? { status: 'Available', shopId: { in: accessibleShopIds } }
-        : { status: 'Available', shopId: { in: [] } };
-
-    const storeStockWhere =
-      accessibleStoreIds.length > 0
-        ? { status: 'Available', storeId: { in: accessibleStoreIds } }
-        : { status: 'Available', storeId: { in: [] } };
-
     // Get the product with related data
     const product = await prisma.product.findUnique({
       where: { id: productId },
@@ -858,19 +782,15 @@ const getProductDetails = async (productId, userId) => {
             name: true,
           },
         },
-        subCategory: {
+        brand: {
           select: {
             id: true,
             name: true,
           },
         },
-        unitOfMeasure: true,
         AdditionalPrice: {
           where: {
-            OR: [
-              { shopId: null }, // Global additional prices
-              { shopId: { in: accessibleShopIds } }, // Shop-specific prices
-            ],
+            OR: [{ shopId: null }, { shopId: { in: accessibleShopIds } }],
           },
           include: {
             shop: {
@@ -880,38 +800,30 @@ const getProductDetails = async (productId, userId) => {
             },
           },
         },
-        batches: {
+        shopStocks: {
+          where: {
+            status: 'Available',
+            shopId: { in: accessibleShopIds },
+          },
+          include: {
+            shop: {
+              include: {
+                branch: true,
+              },
+            },
+          },
+        },
+        storeStocks: {
+          where: {
+            status: 'Available',
+            storeId: { in: accessibleStoreIds },
+          },
           include: {
             store: {
               include: {
                 branch: true,
               },
             },
-            ShopStock: {
-              where: shopStockWhere,
-              include: {
-                shop: {
-                  include: {
-                    branch: true,
-                  },
-                },
-                unitOfMeasure: true,
-              },
-            },
-            StoreStock: {
-              where: storeStockWhere,
-              include: {
-                store: {
-                  include: {
-                    branch: true,
-                  },
-                },
-                unitOfMeasure: true,
-              },
-            },
-          },
-          orderBy: {
-            createdAt: 'desc',
           },
         },
       },
@@ -920,36 +832,17 @@ const getProductDetails = async (productId, userId) => {
     if (!product) {
       throw new Error('Product not found');
     }
-    const additionalPrices = await prisma.additionalPrice.findMany({
-      where: {
-        productId,
-        OR: [
-          { shopId: null }, // Global additional prices
-          { shopId: { in: accessibleShopIds } }, // Shop-specific prices
-        ],
-      },
-      include: {
-        shop: {
-          include: {
-            branch: true,
-          },
-        },
-      },
-    });
-    // Get stock ledger entries for this product (filtered by accessible shops/stores)
+
+    // Get stock ledger entries for this product
     const stockLedgers = await prisma.stockLedger.findMany({
       where: {
-        batch: {
-          productId,
-        },
+        productId,
         OR: [
           { storeId: { in: accessibleStoreIds } },
           { shopId: { in: accessibleShopIds } },
         ],
       },
       include: {
-        batch: true,
-        unitOfMeasure: true,
         store: {
           include: {
             branch: true,
@@ -973,210 +866,38 @@ const getProductDetails = async (productId, userId) => {
       },
     });
 
-    // Calculate total quantities across accessible stores and shops
-    const storeStocks = await prisma.storeStock.groupBy({
-      by: ['storeId'],
-      where: {
-        batch: {
-          productId,
-        },
-        status: 'Available',
-        storeId: { in: accessibleStoreIds },
-      },
-      _sum: {
-        quantity: true,
-      },
-    });
-
-    const shopStocks = await prisma.shopStock.groupBy({
-      by: ['shopId'],
-      where: {
-        batch: {
-          productId,
-        },
-        status: 'Available',
-        shopId: { in: accessibleShopIds },
-      },
-      _sum: {
-        quantity: true,
-      },
-    });
-
-    // Get store and shop details (only accessible ones)
-    const storeIds = storeStocks.map((stock) => stock.storeId);
-    const shopIds = shopStocks.map((stock) => stock.shopId);
-
-    const stores = await prisma.store.findMany({
-      where: {
-        id: {
-          in: storeIds.length > 0 ? storeIds : [],
-        },
-      },
-      include: { branch: true },
-    });
-
-    const shops = await prisma.shop.findMany({
-      where: {
-        id: {
-          in: shopIds.length > 0 ? shopIds : [],
-        },
-      },
-      include: { branch: true },
-    });
-
-    // Create location stock details
-    const storeStockDetails = storeStocks.map((stock) => {
-      const store = stores.find((s) => s.id === stock.storeId);
-      return {
-        storeId: stock.storeId,
-        storeName: store?.name || 'Unknown Store',
-        branchId: store?.branch?.id,
-        branchName: store?.branch?.name,
-        quantity: stock._sum.quantity || 0,
-        type: 'store',
-        additionalPrice: null, // Stores don't have additional prices
-      };
-    });
-
-    const shopStockDetails = shopStocks.map((stock) => {
-      const shop = shops.find((s) => s.id === stock.shopId);
-      // Find additional price for this shop
-      const additionalPrice = additionalPrices.find(
-        (price) => price.shopId === stock.shopId,
-      );
-      // Find global additional price (shopId = null)
-      const globalAdditionalPrice = additionalPrices.find(
-        (price) => price.shopId === null,
-      );
-
-      return {
+    // Process location stocks
+    const locationStocks = [
+      ...product.shopStocks.map((stock) => ({
         shopId: stock.shopId,
-        shopName: shop?.name || 'Unknown Shop',
-        branchId: shop?.branch?.id,
-        branchName: shop?.branch?.name,
-        quantity: stock._sum.quantity || 0,
+        shopName: stock.shop?.name,
+        branchId: stock.shop?.branch?.id,
+        branchName: stock.shop?.branch?.name,
+        quantity: stock.quantity,
         type: 'shop',
-        additionalPrice: additionalPrice || globalAdditionalPrice, // Shop-specific or global
-      };
-    });
+        status: stock.status,
+      })),
+      ...product.storeStocks.map((stock) => ({
+        storeId: stock.storeId,
+        storeName: stock.store?.name,
+        branchId: stock.store?.branch?.id,
+        branchName: stock.store?.branch?.name,
+        quantity: stock.quantity,
+        type: 'store',
+        status: stock.status,
+      })),
+    ];
 
-    // Process batches with detailed information
-    const processedBatches = product.batches.map((batch) => {
-      const batchStoreQuantity = batch.StoreStock.filter(
-        (stock) => stock.status === 'Available',
-      ).reduce((total, stock) => total + stock.quantity, 0);
-
-      const batchShopQuantity = batch.ShopStock.filter(
-        (stock) => stock.status === 'Available',
-      ).reduce((total, stock) => total + stock.quantity, 0);
-
-      const batchTotalQuantity = batchStoreQuantity + batchShopQuantity;
-
-      return {
-        id: batch.id,
-        batchNumber: batch.batchNumber,
-        expiryDate: batch.expiryDate,
-        price: batch.price,
-        stock: batch.stock,
-        warningQuantity: batch.warningQuantity,
-        storeId: batch.storeId,
-        store:
-          batch.store && accessibleStoreIds.includes(batch.storeId)
-            ? {
-                id: batch.store.id,
-                name: batch.store.name,
-                branch: batch.store.branch,
-              }
-            : null,
-        shopStocks: batch.ShopStock.map((stock) => ({
-          id: stock.id,
-          shopId: stock.shopId,
-          shopName: stock.shop?.name,
-          branchId: stock.shop?.branch?.id,
-          branchName: stock.shop?.branch?.name,
-          quantity: stock.quantity,
-          status: stock.status,
-          unitOfMeasure: stock.unitOfMeasure,
-        })),
-        storeStocks: batch.StoreStock.map((stock) => ({
-          id: stock.id,
-          storeId: stock.storeId,
-          storeName: stock.store?.name,
-          branchId: stock.store?.branch?.id,
-          branchName: stock.store?.branch?.name,
-          quantity: stock.quantity,
-          status: stock.status,
-          unitOfMeasure: stock.unitOfMeasure,
-        })),
-        batchStoreQuantity,
-        batchShopQuantity,
-        batchTotalQuantity,
-        createdAt: batch.createdAt,
-        updatedAt: batch.updatedAt,
-      };
-    });
-
-    // Process additional prices (filtered by accessible shops)
-    const processedAdditionalPrices = product.AdditionalPrice.filter(
-      (price) => !price.shopId || accessibleShopIds.includes(price.shopId),
-    ).map((price) => ({
-      id: price.id,
-      label: price.label,
-      price: price.price,
-      shopId: price.shopId,
-      shopName: price.shop?.name,
-      branchId: price.shop?.branch?.id,
-      branchName: price.shop?.branch?.name,
-    }));
-
-    // Process stock ledger entries (already filtered)
-    const processedStockLedgers = stockLedgers.map((ledger) => ({
-      id: ledger.id,
-      invoiceNo: ledger.invoiceNo,
-      movementType: ledger.movementType,
-      quantity: ledger.quantity,
-      unitOfMeasure: ledger.unitOfMeasure,
-      reference: ledger.reference,
-      userId: ledger.userId,
-      user: ledger.user,
-      store:
-        ledger.store && accessibleStoreIds.includes(ledger.store.id)
-          ? {
-              id: ledger.store.id,
-              name: ledger.store.name,
-              branch: ledger.store.branch,
-            }
-          : null,
-      shop:
-        ledger.shop && accessibleShopIds.includes(ledger.shop.id)
-          ? {
-              id: ledger.shop.id,
-              name: ledger.shop.name,
-              branch: ledger.shop.branch,
-            }
-          : null,
-      batch: ledger.batch
-        ? {
-            id: ledger.batch.id,
-            batchNumber: ledger.batch.batchNumber,
-          }
-        : null,
-      notes: ledger.notes,
-      movementDate: ledger.movementDate,
-      createdAt: ledger.createdAt,
-      updatedAt: ledger.updatedAt,
-    }));
-
-    // Calculate total quantities (only from accessible locations)
-    const totalStoreQuantity = storeStockDetails.reduce(
-      (total, store) => total + store.quantity,
+    // Calculate totals
+    const totalShopQuantity = product.shopStocks.reduce(
+      (total, stock) => total + stock.quantity,
       0,
     );
-    const totalShopQuantity = shopStockDetails.reduce(
-      (total, shop) => total + shop.quantity,
+    const totalStoreQuantity = product.storeStocks.reduce(
+      (total, stock) => total + stock.quantity,
       0,
     );
-    const overallTotalQuantity = totalStoreQuantity + totalShopQuantity;
+    const overallTotalQuantity = totalShopQuantity + totalStoreQuantity;
 
     return {
       product: {
@@ -1187,26 +908,26 @@ const getProductDetails = async (productId, userId) => {
         description: product.description,
         sellPrice: product.sellPrice,
         imageUrl: product.imageUrl,
-        category: product.category,
-        subCategory: product.subCategory,
-        unitOfMeasure: product.unitOfMeasure,
+        hasBox: product.hasBox,
+        boxSize: product.boxSize,
+        UnitOfMeasure: product.UnitOfMeasure,
         isActive: product.isActive,
+        category: product.category,
+        brand: product.brand,
         createdAt: product.createdAt,
         updatedAt: product.updatedAt,
       },
-      batches: processedBatches,
-      additionalPrices: processedAdditionalPrices,
-      stockLedgers: processedStockLedgers,
-      locationStocks: [...storeStockDetails, ...shopStockDetails],
+      additionalPrices: product.AdditionalPrice,
+      stockLedgers,
+      locationStocks,
       summary: {
         totalStoreQuantity,
         totalShopQuantity,
         overallTotalQuantity,
-        batchCount: processedBatches.length,
-        storeCount: storeStockDetails.length,
-        shopCount: shopStockDetails.length,
-        ledgerCount: processedStockLedgers.length,
-        additionalPriceCount: processedAdditionalPrices.length,
+        shopCount: product.shopStocks.length,
+        storeCount: product.storeStocks.length,
+        ledgerCount: stockLedgers.length,
+        additionalPriceCount: product.AdditionalPrice.length,
       },
     };
   } catch (error) {
@@ -1214,339 +935,6 @@ const getProductDetails = async (productId, userId) => {
     throw error;
   }
 };
-const getProductBatchesByShops = async (productId) => {
-  // Get all available shop stocks for the product
-  const shopStocks = await prisma.shopStock.findMany({
-    where: {
-      batch: {
-        productId,
-      },
-      status: 'Available',
-      quantity: {
-        gt: 0,
-      },
-    },
-    include: {
-      shop: {
-        include: {
-          branch: true,
-        },
-      },
-      batch: {
-        include: {
-          product: {
-            include: {
-              AdditionalPrice: {
-                where: {
-                  OR: [
-                    { shopId: null }, // Global additional prices
-                    { shopId: { not: null } }, // Shop-specific additional prices
-                  ],
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-  });
-
-  if (!shopStocks || shopStocks.length === 0) {
-    throw new Error('No available stock found for this product in any shop');
-  }
-
-  // Get all pending/approved sells that affect stock availability
-  const pendingSells = await prisma.sell.findMany({
-    where: {
-      items: {
-        some: {
-          productId,
-        },
-      },
-      saleStatus: {
-        in: ['APPROVED', 'PARTIALLY_DELIVERED'], // Only consider approved and partially delivered sells
-      },
-    },
-    include: {
-      items: {
-        where: {
-          productId,
-          itemSaleStatus: 'PENDING', // Only consider pending items (not yet delivered)
-        },
-        include: {
-          shop: true,
-        },
-      },
-    },
-  });
-
-  // Calculate reserved quantities by shop
-  const reservedQuantitiesByShop = new Map();
-
-  pendingSells.forEach((sell) => {
-    sell.items.forEach((item) => {
-      if (item.productId === productId && item.itemSaleStatus === 'PENDING') {
-        const currentReserved = reservedQuantitiesByShop.get(item.shopId) || 0;
-        reservedQuantitiesByShop.set(
-          item.shopId,
-          currentReserved + item.quantity,
-        );
-      }
-    });
-  });
-
-  // Aggregate quantities by shop and collect additional prices
-  const shopsMap = new Map();
-  let totalAvailableQuantity = 0;
-
-  shopStocks.forEach((stock) => {
-    const reservedQuantity = reservedQuantitiesByShop.get(stock.shopId) || 0;
-    const netAvailableQuantity = Math.max(0, stock.quantity - reservedQuantity);
-
-    totalAvailableQuantity += netAvailableQuantity;
-
-    if (shopsMap.has(stock.shop.id)) {
-      const existingShop = shopsMap.get(stock.shop.id);
-      existingShop.quantity += netAvailableQuantity;
-    } else {
-      // Get base product price
-      const basePrice = stock.batch.product.sellPrice;
-
-      // Filter additional prices for this specific shop
-      const shopAdditionalPrices = stock.batch.product.AdditionalPrice.filter(
-        (ap) => ap.shopId === null || ap.shopId === stock.shop.id,
-      );
-
-      // Calculate total price (base + sum of additional prices)
-      let totalPrice = null;
-      if (basePrice) {
-        const base = parseFloat(basePrice.toString());
-        const additionalTotal = shopAdditionalPrices.reduce(
-          (sum, ap) => sum + ap.price,
-          0,
-        );
-        totalPrice = base + additionalTotal;
-      }
-
-      shopsMap.set(stock.shop.id, {
-        shopId: stock.shop.id,
-        shopName: stock.shop.name,
-        branchName: stock.shop.branch?.name,
-        quantity: netAvailableQuantity, // Only net available quantity
-        basePrice,
-        additionalPrices: shopAdditionalPrices.map((ap) => ({
-          id: ap.id,
-          label: ap.label,
-          price: ap.price,
-          isGlobal: ap.shopId === null,
-        })),
-        totalPrice,
-      });
-    }
-  });
-
-  return {
-    totalAvailableQuantity,
-    shops: Array.from(shopsMap.values()),
-    hasStock: totalAvailableQuantity > 0,
-  };
-};
-
-const getRandomProductsWithShopStocks = async (userId = null) => {
-  // Get user's accessible shops if userId is provided
-  let userAccessibleShopIds = [];
-
-  if (userId) {
-    const userWithShops = await prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        shops: {
-          select: { id: true },
-        },
-      },
-    });
-    userAccessibleShopIds = userWithShops?.shops.map((shop) => shop.id) || [];
-  }
-
-  // Build the shop filter condition
-  const shopFilterCondition = userId
-    ? {
-        shopId:
-          userAccessibleShopIds.length > 0
-            ? { in: userAccessibleShopIds }
-            : { in: [] }, // Empty array returns no results
-      }
-    : {}; // No user ID = show all shops
-
-  // Get random products that have batches in shops with available stock
-  const productsWithShopStocks = await prisma.product.findMany({
-    where: {
-      isActive: true,
-      batches: {
-        some: {
-          ShopStock: {
-            some: {
-              quantity: { gt: 0 },
-              ...shopFilterCondition,
-            },
-          },
-        },
-      },
-    },
-    include: {
-      category: true,
-      subCategory: true,
-      unitOfMeasure: true,
-      AdditionalPrice: {
-        include: {
-          shop: {
-            include: {
-              branch: true,
-            },
-          },
-        },
-      },
-      batches: {
-        where: {
-          ShopStock: {
-            some: {
-              quantity: { gt: 0 },
-              ...shopFilterCondition,
-            },
-          },
-        },
-        select: {
-          ShopStock: {
-            where: {
-              quantity: { gt: 0 },
-              ...shopFilterCondition,
-            },
-            select: {
-              quantity: true,
-              shop: {
-                include: {
-                  branch: true,
-                },
-              },
-              unitOfMeasure: true,
-            },
-          },
-        },
-      },
-    },
-    take: 20,
-  });
-
-  // Format the response...
-  const formattedProducts = productsWithShopStocks.map((product) => {
-    // Calculate total available quantity across all batches and shops
-    // Filter additional prices based on user shop access
-    const additionalPrices = product.AdditionalPrice.filter(
-      (price) =>
-        !userId || // No user = show all
-        (userAccessibleShopIds.length > 0 &&
-          userAccessibleShopIds.includes(price.shopId)), // User with shops = only assigned shops
-      // If userAccessibleShopIds is empty, no additional prices will be shown
-    ).map((price) => ({
-      id: price.id,
-      label: price.label,
-      price: price.price,
-      shopId: price.shopId,
-      shop: price.shop
-        ? {
-            id: price.shop.id,
-            name: price.shop.name,
-            branch: price.shop.branch
-              ? {
-                  id: price.shop.branch.id,
-                  name: price.shop.branch.name,
-                }
-              : null,
-          }
-        : null,
-      createdAt: price.createdAt,
-      updatedAt: price.updatedAt,
-    }));
-
-    // Create the final product object
-    const finalProduct = {
-      id: product.id,
-      productCode: product.productCode,
-      name: product.name,
-      generic: product.generic,
-      description: product.description,
-      sellPrice: product.sellPrice,
-      imageUrl: product.imageUrl,
-      category: product.category,
-      subCategory: product.subCategory,
-      unitOfMeasure: product.unitOfMeasure,
-      isActive: product.isActive,
-      additionalPrices,
-      createdAt: product.createdAt,
-      updatedAt: product.updatedAt,
-    };
-
-    return {
-      product: finalProduct,
-    };
-  });
-
-  return {
-    products: formattedProducts,
-    count: formattedProducts.length,
-    note: 'Random products with available shop stock (no top-selling products found)',
-  };
-};
-function processProductResults(products) {
-  const productResults = products.map((product) => {
-    // Filter out batches that have no shop stocks after the query
-
-    // Process additional prices
-    const additionalPrices = product.AdditionalPrice.map((price) => ({
-      id: price.id,
-      label: price.label,
-      price: price.price,
-      shopId: price.shopId,
-      shop: price.shop
-        ? {
-            id: price.shop.id,
-            name: price.shop.name,
-            branch: price.shop.branch
-              ? {
-                  id: price.shop.branch.id,
-                  name: price.shop.branch.name,
-                }
-              : null,
-          }
-        : null,
-      createdAt: price.createdAt,
-      updatedAt: price.updatedAt,
-    }));
-
-    return {
-      product: {
-        id: product.id,
-        productCode: product.productCode,
-        name: product.name,
-        generic: product.generic,
-        description: product.description,
-        category: product.category,
-        subCategory: product.subCategory,
-        unitOfMeasure: product.unitOfMeasure,
-        sellPrice: product.sellPrice,
-        imageUrl: product.imageUrl,
-        isActive: product.isActive,
-        additionalPrices,
-      },
-      // Removed batches array from here
-    };
-  });
-
-  return {
-    products: productResults,
-    count: productResults.length,
-  };
-}
 
 // Helper function to check if string is a valid UUID
 function isValidUUID(str) {
@@ -1558,415 +946,79 @@ function isValidUUID(str) {
 const searchProducts = async (
   searchTerm,
   categoryFilter = null,
-  subCategoryFilter = null,
+  brandFilter = null,
 ) => {
-  let categoryId = null;
-  let subCategoryIds = []; // Changed to array to handle multiple subcategories with same name
+  console.log('=== searchProducts START ===');
+  console.log('Parameters:', { searchTerm, categoryFilter, brandFilter });
 
-  console.log('🔍 searchProducts called with:', {
-    searchTerm,
-    categoryFilter,
-    subCategoryFilter,
-  });
+  try {
+    let categoryId = null;
+    let brandId = null;
 
-  // Handle category filter (could be ID or name)
-  if (categoryFilter) {
-    if (isValidUUID(categoryFilter)) {
-      // It's a UUID, use as ID
-      categoryId = categoryFilter;
-      console.log('📦 Using categoryFilter as UUID:', categoryId);
-    } else {
-      // It's a name, look up the ID
-      console.log('🔎 Looking up category by name:', categoryFilter);
-      const category = await prisma.category.findFirst({
-        where: { name: categoryFilter },
-        select: { id: true },
-      });
-      if (category) {
-        categoryId = category.id;
-        console.log('✅ Found category ID:', categoryId);
+    // Handle category filter
+    if (categoryFilter) {
+      console.log('Processing category filter:', categoryFilter);
+      if (isValidUUID(categoryFilter)) {
+        categoryId = categoryFilter;
+        console.log('Category filter is UUID:', categoryId);
       } else {
-        console.log('❌ Category not found:', categoryFilter);
-        return {
-          products: [],
-          count: 0,
-          note: 'Category not found',
-        };
-      }
-    }
-  }
-
-  // Handle subcategory filter (could be ID or name)
-  if (subCategoryFilter) {
-    if (isValidUUID(subCategoryFilter)) {
-      // It's a UUID, use as ID
-      subCategoryIds = [subCategoryFilter];
-      console.log('📦 Using subCategoryFilter as UUID:', subCategoryIds);
-    } else {
-      // It's a name, look up ALL subcategories with this name
-      const subCategoryWhere = {
-        name: subCategoryFilter,
-      };
-
-      console.log('🔎 Looking up subcategory by name:', subCategoryFilter);
-      console.log('📝 Current categoryId:', categoryId);
-
-      // Only filter by category if category is specified
-      if (categoryId) {
-        subCategoryWhere.categoryId = categoryId;
-        console.log('➕ Added category filter to subcategory search');
-      }
-
-      const subCategories = await prisma.subCategory.findMany({
-        where: subCategoryWhere,
-        select: { id: true, name: true, categoryId: true },
-      });
-
-      console.log('📊 Found subcategories:', subCategories);
-
-      if (subCategories.length > 0) {
-        subCategoryIds = subCategories.map((subCat) => subCat.id);
-        console.log('✅ Subcategory IDs found:', subCategoryIds);
-      } else {
-        console.log('❌ No subcategories found with name:', subCategoryFilter);
-        return {
-          products: [],
-          count: 0,
-          note: 'Subcategory not found',
-        };
-      }
-    }
-  }
-
-  console.log('🎯 Final filters:', {
-    categoryId,
-    subCategoryIds,
-    subCategoryCount: subCategoryIds.length,
-  });
-
-  // Add debug logging to see what's being searched
-  // First, get all products and filter manually for case-insensitive search
-  const allProducts = await prisma.product.findMany({
-    where: {
-      isActive: true,
-      // Apply category filter if provided
-      ...(categoryId && { categoryId }),
-      // Apply subcategory filter if provided - now can be multiple IDs
-      ...(subCategoryIds.length > 0 && {
-        subCategoryId: { in: subCategoryIds },
-      }),
-    },
-    include: {
-      category: true,
-      subCategory: true,
-      unitOfMeasure: true,
-      AdditionalPrice: {
-        include: {
-          shop: {
-            include: {
-              branch: true,
-            },
-          },
-        },
-      },
-      batches: {
-        where: {
-          ShopStock: {
-            some: {
-              quantity: { gt: 0 },
-            },
-          },
-        },
-        include: {
-          ShopStock: {
-            where: {
-              quantity: { gt: 0 },
-            },
-            include: {
-              shop: {
-                include: {
-                  branch: true,
-                },
-              },
-              unitOfMeasure: true,
-            },
-          },
-        },
-      },
-    },
-  });
-
-  console.log('📦 Total products fetched (before search term filter):', allProducts.length);
-  
-  // Log sample products to check their structure
-  if (allProducts.length > 0) {
-    console.log('📋 Sample product structure:', {
-      id: allProducts[0].id,
-      name: allProducts[0].name,
-      category: allProducts[0].category?.name,
-      subCategory: allProducts[0].subCategory?.name,
-      categoryId: allProducts[0].categoryId,
-      subCategoryId: allProducts[0].subCategoryId,
-    });
-  }
-
-  // If no search term, return all filtered products
-  if (!searchTerm) {
-    console.log('🔍 No search term provided, returning all filtered products');
-    return processProductResults(allProducts);
-  }
-
-  console.log('🔎 Applying search term:', searchTerm);
-  
-  // Manual case-insensitive filtering with multiple field support
-  const searchTermLower = searchTerm.toLowerCase().trim();
-
-  const filteredProducts = allProducts.filter((product) => {
-    // Check product name
-    const nameMatch = product.name.toLowerCase().includes(searchTermLower);
-
-    // Check generic name - handle comma-separated values
-    let genericMatch = false;
-    if (product.generic) {
-      // Split by commas and check each generic term
-      const genericTerms = product.generic
-        .toLowerCase()
-        .split(',')
-        .map((term) => term.trim());
-      genericMatch = genericTerms.some((term) =>
-        term.includes(searchTermLower),
-      );
-    }
-
-    // Check product code
-    const codeMatch = product.productCode
-      .toLowerCase()
-      .includes(searchTermLower);
-
-    // Check category name (case-insensitive)
-    const categoryMatch = product.category?.name
-      .toLowerCase()
-      .includes(searchTermLower);
-
-    // Check subcategory name (case-insensitive)
-    const subCategoryMatch = product.subCategory?.name
-      .toLowerCase()
-      .includes(searchTermLower);
-
-    const matches =
-      nameMatch ||
-      genericMatch ||
-      codeMatch ||
-      categoryMatch ||
-      subCategoryMatch;
-
-    return matches;
-  });
-
-  console.log('✅ Products after search term filtering:', filteredProducts.length);
-  
-  return processProductResults(filteredProducts);
-};
-
-const getTopSellingProducts = async (
-  userId = null,
-  searchTerm = null,
-  categoryName = null,
-  subCategoryName = null,
-) => {
-  let categoryId = null;
-  let subCategoryIds = [];
-
-  console.log('🏆 getTopSellingProducts called with:', {
-    userId,
-    searchTerm,
-    categoryName,
-    subCategoryName,
-  });
-
-  // If category name is provided, find the category ID
-  if (categoryName) {
-    console.log('🔎 Looking up category by name:', categoryName);
-    const category = await prisma.category.findFirst({
-      where: {
-        name: categoryName,
-      },
-      select: { id: true },
-    });
-    if (category) {
-      categoryId = category.id;
-      console.log('✅ Found category ID:', categoryId);
-    } else {
-      console.log('❌ Category not found:', categoryName);
-      return {
-        products: [],
-        count: 0,
-        note: 'Category not found',
-      };
-    }
-  }
-
-  // If subcategory name is provided, find ALL subcategory IDs with that name
-  if (subCategoryName) {
-    const subCategoryWhere = {
-      name: subCategoryName,
-    };
-
-    console.log('🔎 Looking up subcategory by name:', subCategoryName);
-    console.log('📝 Current categoryId:', categoryId);
-
-    // Only filter by category if category is also specified
-    if (categoryId) {
-      subCategoryWhere.categoryId = categoryId;
-      console.log('➕ Added category filter to subcategory search');
-    }
-
-    const subCategories = await prisma.subCategory.findMany({
-      where: subCategoryWhere,
-      select: { id: true, name: true, categoryId: true },
-    });
-
-    console.log('📊 Found subcategories:', subCategories);
-
-    if (subCategories.length > 0) {
-      subCategoryIds = subCategories.map((subCat) => subCat.id);
-      console.log('✅ Subcategory IDs found:', subCategoryIds);
-    } else {
-      console.log('❌ No subcategories found with name:', subCategoryName);
-      return {
-        products: [],
-        count: 0,
-        note: 'Subcategory not found',
-      };
-    }
-  }
-
-  console.log('🎯 Final filters for top selling:', {
-    categoryId,
-    subCategoryIds,
-    subCategoryCount: subCategoryIds.length,
-  });
-
-  // If search term is provided, use search functionality
-  if (searchTerm) {
-    console.log('🔍 Search term provided, delegating to searchProducts');
-    return searchProducts(searchTerm, categoryId, subCategoryName);
-  }
-
-  // Get user's accessible shops if userId is provided
-  let userAccessibleShopIds = [];
-  if (userId) {
-    console.log('👤 Getting accessible shops for user:', userId);
-    const userWithShops = await prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        shops: {
+        const category = await prisma.category.findFirst({
+          where: { name: categoryFilter },
           select: { id: true },
-        },
-      },
-    });
-    userAccessibleShopIds = userWithShops?.shops.map((shop) => shop.id) || [];
-    console.log('🏪 User accessible shop IDs:', userAccessibleShopIds);
-  }
-
-  // Build the shop filter condition
-  const shopFilterCondition = userId
-    ? {
-        shopId:
-          userAccessibleShopIds.length > 0
-            ? { in: userAccessibleShopIds }
-            : { in: [] },
+        });
+        if (category) {
+          categoryId = category.id;
+          console.log('Category found with ID:', categoryId);
+        } else {
+          console.log('Category not found:', categoryFilter);
+          return {
+            products: [],
+            count: 0,
+            note: 'Category not found',
+          };
+        }
       }
-    : {};
+    }
 
-  console.log('📈 Getting top selling products from sell items WITH category/subcategory filter...');
-  
-  // First, get product IDs in the filtered category/subcategory
-  let productIdsInFilter = [];
-  
-  if (categoryId || subCategoryIds.length > 0) {
-    const productWhere = {
+    // Handle brand filter
+    if (brandFilter) {
+      console.log('Processing brand filter:', brandFilter);
+      if (isValidUUID(brandFilter)) {
+        brandId = brandFilter;
+        console.log('Brand filter is UUID:', brandId);
+      } else {
+        const brand = await prisma.brand.findFirst({
+          where: { name: brandFilter },
+          select: { id: true },
+        });
+        if (brand) {
+          brandId = brand.id;
+          console.log('Brand found with ID:', brandId);
+        } else {
+          console.log('Brand not found:', brandFilter);
+          return {
+            products: [],
+            count: 0,
+            note: 'Brand not found',
+          };
+        }
+      }
+    }
+
+    // Build where clause
+    const whereClause = {
       isActive: true,
+      ...(categoryId && { categoryId }),
+      ...(brandId && { brandId }),
     };
-    
-    if (categoryId) {
-      productWhere.categoryId = categoryId;
-    }
-    
-    if (subCategoryIds.length > 0) {
-      productWhere.subCategoryId = { in: subCategoryIds };
-    }
-    
-    const productsInFilter = await prisma.product.findMany({
-      where: productWhere,
-      select: { id: true }
-    });
-    productIdsInFilter = productsInFilter.map(p => p.id);
-    console.log('📋 Product IDs in filter:', productIdsInFilter.length);
-    
-    if (productIdsInFilter.length === 0) {
-      console.log('⚠️ No products found in the specified category/subcategory');
-      return {
-        products: [],
-        count: 0,
-        note: 'No products found in the specified category/subcategory',
-      };
-    }
-  }
+    console.log('Where clause:', JSON.stringify(whereClause, null, 2));
 
-  // Now get top selling products, filtered by category/subcategory if specified
-  const topSellingProducts = await prisma.sellItem.groupBy({
-    by: ['productId'],
-    where: {
-      // Only include completed/delivered sales
-      OR: [
-        { itemSaleStatus: 'DELIVERED' },
-        {
-          sell: {
-            saleStatus: {
-              in: ['DELIVERED', 'APPROVED', 'PARTIALLY_DELIVERED'],
-            },
-          },
-        },
-      ],
-      // Apply category/subcategory filter if specified
-      ...((categoryId || subCategoryIds.length > 0) && {
-        productId: { in: productIdsInFilter }
-      }),
-    },
-    _sum: {
-      quantity: true,
-      totalPrice: true,
-    },
-    _count: {
-      id: true,
-    },
-    orderBy: {
-      _sum: {
-        quantity: 'desc',
-      },
-    },
-    take: 20,
-  });
-
-  console.log('📊 Top selling product IDs (filtered by category/subcategory):', topSellingProducts.map(item => item.productId));
-
-  // If no top selling products found in the filter, get random products from that filter
-  if (topSellingProducts.length === 0) {
-    console.log('⚠️ No top selling products found in filter, getting random products from filter');
-    
-    // Get random products from the specified category/subcategory
-    const randomProducts = await prisma.product.findMany({
-      where: {
-        isActive: true,
-        ...(categoryId && { categoryId }),
-        ...(subCategoryIds.length > 0 && { subCategoryId: { in: subCategoryIds } }),
-      },
-      take: 20,
+    // Get all products with filters
+    const allProducts = await prisma.product.findMany({
+      where: whereClause,
       include: {
         category: true,
-        subCategory: true,
-        unitOfMeasure: true,
+        brand: true,
         AdditionalPrice: {
           include: {
             shop: {
@@ -1976,29 +1028,246 @@ const getTopSellingProducts = async (
             },
           },
         },
-        batches: {
-          where: {
-            ShopStock: {
-              some: {
-                quantity: { gt: 0 },
-                ...shopFilterCondition,
+      },
+    });
+
+    console.log('Products found with filters:', allProducts.length);
+
+    // If no search term, return all filtered products
+    if (!searchTerm) {
+      console.log('No search term, returning all filtered products');
+      return {
+        products: allProducts.map((product) => ({ product })),
+        count: allProducts.length,
+      };
+    }
+
+    // Manual case-insensitive filtering
+    const searchTermLower = searchTerm.toLowerCase().trim();
+    console.log('Search term lowercased:', searchTermLower);
+
+    const filteredProducts = allProducts.filter((product) => {
+      const nameMatch = product.name.toLowerCase().includes(searchTermLower);
+      
+      let genericMatch = false;
+      if (product.generic) {
+        const genericTerms = product.generic
+          .toLowerCase()
+          .split(',')
+          .map((term) => term.trim());
+        genericMatch = genericTerms.some((term) =>
+          term.includes(searchTermLower),
+        );
+      }
+
+      const codeMatch = product.productCode
+        .toLowerCase()
+        .includes(searchTermLower);
+
+      const categoryMatch = product.category?.name
+        .toLowerCase()
+        .includes(searchTermLower);
+
+      const brandMatch = product.brand?.name
+        .toLowerCase()
+        .includes(searchTermLower);
+
+      const match = nameMatch || genericMatch || codeMatch || categoryMatch || brandMatch;
+      
+      if (match) {
+        console.log('Product matched:', product.name, {
+          nameMatch,
+          genericMatch,
+          codeMatch,
+          categoryMatch,
+          brandMatch
+        });
+      }
+      
+      return match;
+    });
+
+    console.log('Filtered products count:', filteredProducts.length);
+    console.log('=== searchProducts END ===');
+
+    return {
+      products: filteredProducts.map((product) => ({ product })),
+      count: filteredProducts.length,
+    };
+  } catch (error) {
+    console.error('=== searchProducts ERROR ===');
+    console.error('Error:', error);
+    throw error;
+  }
+};
+
+const getTopSellingProducts = async (
+  userId = null,
+  searchTerm = null,
+  categoryName = null,
+  brandName = null,
+) => {
+  console.log('=== getTopSellingProducts START ===');
+  console.log('Parameters:', { userId, searchTerm, categoryName, brandName });
+
+  try {
+    let categoryId = null;
+    let brandId = null;
+
+    // If category name is provided, find the category ID
+    if (categoryName) {
+      console.log('Looking up category by name:', categoryName);
+      const category = await prisma.category.findFirst({
+        where: { name: categoryName },
+        select: { id: true },
+      });
+      if (category) {
+        categoryId = category.id;
+        console.log('Category found with ID:', categoryId);
+      } else {
+        console.log('Category not found:', categoryName);
+        return {
+          products: [],
+          count: 0,
+          note: 'Category not found',
+        };
+      }
+    }
+
+    // If brand name is provided, find the brand ID
+    if (brandName) {
+      console.log('Looking up brand by name:', brandName);
+      const brand = await prisma.brand.findFirst({
+        where: { name: brandName },
+        select: { id: true },
+      });
+      if (brand) {
+        brandId = brand.id;
+        console.log('Brand found with ID:', brandId);
+      } else {
+        console.log('Brand not found:', brandName);
+        return {
+          products: [],
+          count: 0,
+          note: 'Brand not found',
+        };
+      }
+    }
+
+    // If search term is provided, use search functionality
+    if (searchTerm) {
+      console.log('Search term provided, calling searchProducts...');
+      const searchResult = await searchProducts(searchTerm, categoryId, brandId);
+      console.log('Search result count:', searchResult.count);
+      console.log('=== getTopSellingProducts END ===');
+      return searchResult;
+    }
+
+    // Get user's accessible shops if userId is provided
+    let userAccessibleShopIds = [];
+    if (userId) {
+      console.log('Fetching user accessible shops for userId:', userId);
+      const userWithShops = await prisma.user.findUnique({
+        where: { id: userId },
+        select: {
+          shops: { select: { id: true } },
+        },
+      });
+      userAccessibleShopIds = userWithShops?.shops.map((shop) => shop.id) || [];
+      console.log('User accessible shop IDs:', userAccessibleShopIds);
+    }
+
+    // Get top selling products from sell items
+    console.log('Fetching top selling products...');
+    const topSellingProducts = await prisma.sellItem.groupBy({
+      by: ['productId'],
+      where: {
+        OR: [
+          { itemSaleStatus: 'DELIVERED' },
+          {
+            sell: {
+              saleStatus: {
+                in: ['DELIVERED', 'APPROVED', 'PARTIALLY_DELIVERED'],
               },
             },
           },
-          select: {
-            ShopStock: {
-              where: {
-                quantity: { gt: 0 },
-                ...shopFilterCondition,
-              },
-              select: {
-                quantity: true,
-                shop: {
-                  include: {
-                    branch: true,
-                  },
+        ],
+      },
+      _sum: {
+        quantity: true,
+      },
+      orderBy: {
+        _sum: {
+          quantity: 'desc',
+        },
+      },
+      take: 20,
+    });
+
+    console.log('Top selling products found:', topSellingProducts.length);
+
+    if (topSellingProducts.length === 0) {
+      console.log('No top selling products, fetching random active products...');
+      
+      const whereClause = {
+        isActive: true,
+        ...(categoryId && { categoryId }),
+        ...(brandId && { brandId }),
+      };
+      console.log('Random products where clause:', JSON.stringify(whereClause, null, 2));
+      
+      // Get random active products
+      const randomProducts = await prisma.product.findMany({
+        where: whereClause,
+        take: 20,
+        include: {
+          category: true,
+          brand: true,
+          AdditionalPrice: {
+            include: {
+              shop: {
+                include: {
+                  branch: true,
                 },
-                unitOfMeasure: true,
+              },
+            },
+          },
+        },
+      });
+
+      console.log('Random products found:', randomProducts.length);
+      console.log('=== getTopSellingProducts END ===');
+
+      return {
+        products: randomProducts.map((product) => ({ product })),
+        count: randomProducts.length,
+        note: 'Random products (no top sellers found)',
+      };
+    }
+
+    // Get product IDs from top selling products
+    const productIds = topSellingProducts.map((item) => item.productId);
+    console.log('Product IDs from top sellers:', productIds);
+
+    // Build where clause for products
+    const whereClause = {
+      id: { in: productIds },
+      isActive: true,
+      ...(categoryId && { categoryId }),
+      ...(brandId && { brandId }),
+    };
+    console.log('Products where clause:', JSON.stringify(whereClause, null, 2));
+
+    const productsWithDetails = await prisma.product.findMany({
+      where: whereClause,
+      include: {
+        category: true,
+        brand: true,
+        AdditionalPrice: {
+          include: {
+            shop: {
+              include: {
+                branch: true,
               },
             },
           },
@@ -2006,88 +1275,50 @@ const getTopSellingProducts = async (
       },
     });
 
-    // Format the random products
-    const formattedProducts = randomProducts.map((product) => {
-      // Filter additional prices based on user shop access
-      const additionalPrices = product.AdditionalPrice.filter(
-        (price) =>
-          !userId || // No user = show all
-          (userAccessibleShopIds.length > 0 &&
-            userAccessibleShopIds.includes(price.shopId)), // User with shops = only assigned shops
-      ).map((price) => ({
-        id: price.id,
-        label: price.label,
-        price: price.price,
-        shopId: price.shopId,
-        shop: price.shop
-          ? {
-              id: price.shop.id,
-              name: price.shop.name,
-              branch: price.shop.branch
-                ? {
-                    id: price.shop.branch.id,
-                    name: price.shop.branch.name,
-                  }
-                : null,
-            }
-          : null,
-        createdAt: price.createdAt,
-        updatedAt: price.updatedAt,
-      }));
-
-      // Create the final product object
-      const finalProduct = {
-        id: product.id,
-        productCode: product.productCode,
-        name: product.name,
-        generic: product.generic,
-        description: product.description,
-        sellPrice: product.sellPrice,
-        imageUrl: product.imageUrl,
-        category: product.category,
-        subCategory: product.subCategory,
-        unitOfMeasure: product.unitOfMeasure,
-        isActive: product.isActive,
-        additionalPrices,
-        createdAt: product.createdAt,
-        updatedAt: product.updatedAt,
-      };
-
-      return {
-        product: finalProduct,
-      };
-    });
+    console.log('Products with details found:', productsWithDetails.length);
+    console.log('=== getTopSellingProducts END ===');
 
     return {
-      products: formattedProducts,
-      count: formattedProducts.length,
-      note: 'Random products from specified category/subcategory (no top sellers found)',
+      products: productsWithDetails.map((product) => ({ product })),
+      count: productsWithDetails.length,
+      note: 'Top selling products',
     };
+  } catch (error) {
+    console.error('=== getTopSellingProducts ERROR ===');
+    console.error('Error:', error);
+    throw error;
+  }
+};
+const getRandomProductsWithShopStocks = async (userId = null) => {
+  // Get user's accessible shops if userId is provided
+  let userAccessibleShopIds = [];
+
+  if (userId) {
+    const userWithShops = await prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        shops: { select: { id: true } },
+      },
+    });
+    userAccessibleShopIds = userWithShops?.shops.map((shop) => shop.id) || [];
   }
 
-  // Get product IDs from top selling products
-  const productIds = topSellingProducts.map((item) => item.productId);
-
-  // Build where clause for products
-  const productWhereClause = {
-    id: { in: productIds },
-    isActive: true,
-  };
-
-  // Add category filter if found (though it should already be included from the sellItem filter)
-  if (categoryId) {
-    productWhereClause.categoryId = categoryId;
-  }
-
-  console.log('🎯 Product where clause:', productWhereClause);
-
-  // Get products with their additional prices and shop availability
-  const productsWithDetails = await prisma.product.findMany({
-    where: productWhereClause,
+  // Get random products that have shop stocks
+  const productsWithShopStocks = await prisma.product.findMany({
+    where: {
+      isActive: true,
+      shopStocks: {
+        some: {
+          quantity: { gt: 0 },
+          ...(userAccessibleShopIds.length > 0 && {
+            shopId: { in: userAccessibleShopIds },
+          }),
+        },
+      },
+    },
     include: {
       category: true,
-      subCategory: true,
-      unitOfMeasure: true,
+      brand: true,
       AdditionalPrice: {
         include: {
           shop: {
@@ -2097,372 +1328,315 @@ const getTopSellingProducts = async (
           },
         },
       },
-      batches: {
+      shopStocks: {
         where: {
-          ShopStock: {
-            some: {
-              quantity: { gt: 0 },
-              ...shopFilterCondition,
-            },
-          },
+          quantity: { gt: 0 },
+          ...(userAccessibleShopIds.length > 0 && {
+            shopId: { in: userAccessibleShopIds },
+          }),
         },
-        select: {
-          ShopStock: {
-            where: {
-              quantity: { gt: 0 },
-              ...shopFilterCondition,
-            },
-            select: {
-              quantity: true,
-              shop: {
-                include: {
-                  branch: true,
-                },
-              },
-              unitOfMeasure: true,
+        include: {
+          shop: {
+            include: {
+              branch: true,
             },
           },
         },
       },
     },
+    take: 20,
   });
-
-  console.log('📦 Products with details found:', productsWithDetails.length);
-
-  // Format the response...
-  const formattedProducts = productsWithDetails.map((product) => {
-    // Filter additional prices based on user shop access
-    const additionalPrices = product.AdditionalPrice.filter(
-      (price) =>
-        !userId || // No user = show all
-        (userAccessibleShopIds.length > 0 &&
-          userAccessibleShopIds.includes(price.shopId)), // User with shops = only assigned shops
-    ).map((price) => ({
-      id: price.id,
-      label: price.label,
-      price: price.price,
-      shopId: price.shopId,
-      shop: price.shop
-        ? {
-            id: price.shop.id,
-            name: price.shop.name,
-            branch: price.shop.branch
-              ? {
-                  id: price.shop.branch.id,
-                  name: price.shop.branch.name,
-                }
-              : null,
-          }
-        : null,
-      createdAt: price.createdAt,
-      updatedAt: price.updatedAt,
-    }));
-
-    // Create the final product object
-    const finalProduct = {
-      id: product.id,
-      productCode: product.productCode,
-      name: product.name,
-      generic: product.generic,
-      description: product.description,
-      sellPrice: product.sellPrice,
-      imageUrl: product.imageUrl,
-      category: product.category,
-      subCategory: product.subCategory,
-      unitOfMeasure: product.unitOfMeasure,
-      isActive: product.isActive,
-      additionalPrices,
-      createdAt: product.createdAt,
-      updatedAt: product.updatedAt,
-    };
-
-    return {
-      product: finalProduct,
-    };
-  });
-
-  // Sort by sales quantity and take top 20
-  const topProducts = formattedProducts
-    .sort(
-      (a, b) =>
-        (b.salesData?.totalQuantitySold || 0) -
-        (a.salesData?.totalQuantitySold || 0),
-    )
-    .slice(0, 20);
-
-  console.log('✅ Final top products count:', topProducts.length);
 
   return {
-    products: topProducts,
-    count: topProducts.length,
-    note: 'Top selling products with available shop stock',
+    products: productsWithShopStocks.map((product) => ({ product })),
+    count: productsWithShopStocks.length,
+    note: 'Random products with available shop stock',
   };
 };
+const getProductByShops = async (productId) => {
+  console.log('=== getProductByShops START ===');
+  console.log('Product ID:', productId);
 
-const getProductBatchesByShopsUser = async (productId, userId = null) => {
-  // If userId is provided, get user's accessible shops first
-  let userShopIds = [];
-  if (userId) {
-    const userWithShops = await prisma.user.findUnique({
-      where: { id: userId },
-      select: {
-        shops: {
-          select: { id: true },
-        },
-      },
-    });
-
-    if (!userWithShops) {
-      throw new Error('User not found');
-    }
-
-    userShopIds = userWithShops.shops.map((shop) => shop.id);
-
-    // If user has no shop access, return empty result
-    if (userShopIds.length === 0) {
-      return {
-        totalAvailableQuantity: 0,
-        shops: [],
-        hasStock: false,
-        _metadata: {
-          totalShops: 0,
-          accessibleShops: 0,
-          hasRestrictedAccess: false,
-          message: 'User has no shop access',
-        },
-      };
-    }
-  }
-
-  // Build where clause for shop stocks
-  const shopStockWhere = {
-    batch: {
-      productId,
-    },
-    status: 'Available',
-    quantity: {
-      gt: 0,
-    },
-  };
-
-  // If userId is provided, filter by user's accessible shops
-  if (userId && userShopIds.length > 0) {
-    shopStockWhere.shopId = {
-      in: userShopIds,
-    };
-  }
-
-  // Get all available shop stocks for the product
-  const shopStocks = await prisma.shopStock.findMany({
-    where: shopStockWhere,
-    include: {
-      shop: {
-        include: {
-          branch: true,
-        },
-      },
-      batch: {
-        include: {
-          product: {
-            include: {
-              AdditionalPrice: {
-                where: {
-                  OR: [
-                    { shopId: null }, // Global additional prices
-                    { shopId: { not: null } }, // Shop-specific additional prices
-                  ],
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-  });
-
-  if (!shopStocks || shopStocks.length === 0) {
-    return {
-      totalAvailableQuantity: 0,
-      shops: [],
-      hasStock: false,
-      _metadata: {
-        totalShops: 0,
-        accessibleShops: 0,
-        hasRestrictedAccess: false,
-        message:
-          'No available stock found for this product in accessible shops',
-      },
-    };
-  }
-
-  // Get shop IDs from the fetched stocks for reservation calculation
-  const stockShopIds = [...new Set(shopStocks.map((stock) => stock.shopId))];
-
-  // Get all pending/approved sells that affect stock availability in accessible shops
-  const pendingSells = await prisma.sell.findMany({
-    where: {
-      items: {
-        some: {
-          productId,
-          shopId: {
-            in: stockShopIds,
-          },
-        },
-      },
-      saleStatus: {
-        in: ['APPROVED', 'PARTIALLY_DELIVERED'], // Only consider approved and partially delivered sells
-      },
-    },
-    include: {
-      items: {
-        where: {
-          productId,
-          shopId: {
-            in: stockShopIds,
-          },
-          itemSaleStatus: 'PENDING', // Only consider pending items (not yet delivered)
-        },
-        include: {
-          shop: true,
-        },
-      },
-    },
-  });
-
-  // Calculate reserved quantities by shop (only for accessible shops)
-  const reservedQuantitiesByShop = new Map();
-
-  pendingSells.forEach((sell) => {
-    sell.items.forEach((item) => {
-      if (
-        item.productId === productId &&
-        item.itemSaleStatus === 'PENDING' &&
-        stockShopIds.includes(item.shopId)
-      ) {
-        const currentReserved = reservedQuantitiesByShop.get(item.shopId) || 0;
-        reservedQuantitiesByShop.set(
-          item.shopId,
-          currentReserved + item.quantity,
-        );
-      }
-    });
-  });
-
-  // Aggregate quantities by shop and collect additional prices
-  const shopsMap = new Map();
-  let totalAvailableQuantity = 0;
-
-  shopStocks.forEach((stock) => {
-    const reservedQuantity = reservedQuantitiesByShop.get(stock.shopId) || 0;
-    const netAvailableQuantity = Math.max(0, stock.quantity - reservedQuantity);
-
-    totalAvailableQuantity += netAvailableQuantity;
-
-    if (shopsMap.has(stock.shop.id)) {
-      const existingShop = shopsMap.get(stock.shop.id);
-      existingShop.quantity += netAvailableQuantity;
-    } else {
-      // Get base product price
-      const basePrice = stock.batch.product.sellPrice;
-
-      // Filter additional prices for this specific shop
-      const shopAdditionalPrices = stock.batch.product.AdditionalPrice.filter(
-        (ap) => ap.shopId === null || ap.shopId === stock.shop.id,
-      );
-
-      // Calculate total price (base + sum of additional prices)
-      let totalPrice = null;
-      if (basePrice) {
-        const base = parseFloat(basePrice.toString());
-        const additionalTotal = shopAdditionalPrices.reduce(
-          (sum, ap) => sum + ap.price,
-          0,
-        );
-        totalPrice = base + additionalTotal;
-      }
-
-      shopsMap.set(stock.shop.id, {
-        shopId: stock.shop.id,
-        shopName: stock.shop.name,
-        branchName: stock.shop.branch?.name,
-        quantity: netAvailableQuantity, // Only net available quantity
-        basePrice,
-        additionalPrices: shopAdditionalPrices.map((ap) => ({
-          id: ap.id,
-          label: ap.label,
-          price: ap.price,
-          isGlobal: ap.shopId === null,
-        })),
-        totalPrice,
-      });
-    }
-  });
-
-  const shopsArray = Array.from(shopsMap.values());
-
-  // Calculate metadata
-  let totalShopsInSystem = 0;
-  if (userId) {
-    // Count total shops that have this product in stock (regardless of user access)
-    const allShopsWithStock = await prisma.shopStock.findMany({
+  try {
+    // Get all available shop stocks for the product
+    console.log('Fetching shop stocks for product...');
+    const shopStocks = await prisma.shopStock.findMany({
       where: {
-        batch: {
-          productId,
-        },
+        productId,
         status: 'Available',
         quantity: {
           gt: 0,
         },
       },
-      select: {
-        shopId: true,
+      include: {
+        shop: {
+          include: {
+            branch: true,
+          },
+        },
+        product: {
+          include: {
+            AdditionalPrice: {
+              where: {
+                OR: [{ shopId: null }, { shopId: { not: null } }],
+              },
+            },
+          },
+        },
       },
-      distinct: ['shopId'],
     });
-    totalShopsInSystem = allShopsWithStock.length;
+
+    console.log('Shop stocks found:', shopStocks.length);
+
+    // If no shop stocks found, return empty response instead of throwing error
+    if (!shopStocks || shopStocks.length === 0) {
+      console.log(
+        'No available stock found for this product in any shop - returning empty response',
+      );
+
+      // Get product details even if no stock
+      const product = await prisma.product.findUnique({
+        where: { id: productId },
+        select: {
+          hasBox: true,
+          boxSize: true,
+          UnitOfMeasure: true,
+          name: true,
+          productCode: true,
+        },
+      });
+
+      return {
+        totalAvailableQuantity: 0,
+        shops: [],
+        hasStock: false,
+        product: {
+          hasBox: product?.hasBox || false,
+          boxSize: product?.boxSize || null,
+          UnitOfMeasure: product?.UnitOfMeasure || 'unit',
+          name: product?.name,
+          productCode: product?.productCode,
+        },
+      };
+    }
+
+    // Get all pending/approved sells that affect stock availability
+    console.log('Fetching pending sells...');
+    const pendingSells = await prisma.sell.findMany({
+      where: {
+        items: {
+          some: {
+            productId,
+          },
+        },
+        saleStatus: {
+          in: ['APPROVED', 'PARTIALLY_DELIVERED'],
+        },
+      },
+      include: {
+        items: {
+          where: {
+            productId,
+            itemSaleStatus: 'PENDING',
+          },
+          include: {
+            shop: true,
+          },
+        },
+      },
+    });
+
+    console.log('Pending sells found:', pendingSells.length);
+
+    // Calculate reserved quantities by shop (in pieces)
+    const reservedQuantitiesByShop = new Map();
+
+    pendingSells.forEach((sell, sellIndex) => {
+      console.log(`Processing sell ${sellIndex + 1}:`, sell.id);
+      sell.items.forEach((item, itemIndex) => {
+        if (item.productId === productId && item.itemSaleStatus === 'PENDING') {
+          const currentReserved =
+            reservedQuantitiesByShop.get(item.shopId) || 0;
+          console.log(
+            `  Item ${itemIndex + 1}: Shop ${item.shopId}, Quantity: ${
+              item.quantity
+            }, Current Reserved: ${currentReserved}`,
+          );
+          reservedQuantitiesByShop.set(
+            item.shopId,
+            currentReserved + item.quantity,
+          );
+        }
+      });
+    });
+
+    console.log(
+      'Reserved quantities by shop:',
+      Object.fromEntries(reservedQuantitiesByShop),
+    );
+
+    // Aggregate quantities by shop and collect additional prices
+    const shopsMap = new Map();
+    let totalAvailableQuantity = 0;
+
+    shopStocks.forEach((stock, stockIndex) => {
+      console.log(`\n--- Processing stock ${stockIndex + 1} ---`);
+      console.log('Stock shop ID:', stock.shopId);
+      console.log('Stock quantity:', stock.quantity);
+
+      const reservedQuantity = reservedQuantitiesByShop.get(stock.shopId) || 0;
+      console.log('Reserved quantity for this shop:', reservedQuantity);
+
+      const netAvailableQuantity = Math.max(
+        0,
+        stock.quantity - reservedQuantity,
+      );
+      console.log('Net available quantity:', netAvailableQuantity);
+
+      totalAvailableQuantity += netAvailableQuantity;
+      console.log('Total available quantity so far:', totalAvailableQuantity);
+
+      if (shopsMap.has(stock.shop.id)) {
+        console.log('Shop already in map, updating quantity...');
+        const existingShop = shopsMap.get(stock.shop.id);
+        existingShop.quantity += netAvailableQuantity;
+        console.log('Updated shop quantity:', existingShop.quantity);
+      } else {
+        console.log('New shop, creating entry...');
+
+        // Get base product price
+        const basePrice = stock.product.sellPrice;
+        console.log('Base price:', basePrice);
+
+        // Filter additional prices for this specific shop
+        const shopAdditionalPrices = stock.product.AdditionalPrice.filter(
+          (ap) => ap.shopId === null || ap.shopId === stock.shop.id,
+        );
+        console.log('Additional prices found:', shopAdditionalPrices.length);
+
+        // Calculate total price (base + sum of additional prices)
+        let totalPrice = null;
+        if (basePrice) {
+          const base = parseFloat(basePrice.toString());
+          const additionalTotal = shopAdditionalPrices.reduce(
+            (sum, ap) => sum + ap.price,
+            0,
+          );
+          totalPrice = base + additionalTotal;
+          console.log('Total price calculation:', {
+            base,
+            additionalTotal,
+            totalPrice,
+          });
+        }
+
+        // Calculate box availability if product supports boxes
+        let availableBoxes = 0;
+        let remainingPieces = netAvailableQuantity;
+        let boxSize = null;
+
+        console.log('Product hasBox:', stock.product.hasBox);
+        console.log('Product boxSize:', stock.product.boxSize);
+
+        if (
+          stock.product.hasBox &&
+          stock.product.boxSize &&
+          stock.product.boxSize > 0
+        ) {
+          boxSize = stock.product.boxSize;
+          availableBoxes = Math.floor(netAvailableQuantity / boxSize);
+          remainingPieces = netAvailableQuantity % boxSize;
+          console.log('Box calculation:', {
+            boxSize,
+            availableBoxes,
+            remainingPieces,
+          });
+        }
+
+        const shopData = {
+          shopId: stock.shop.id,
+          shopName: stock.shop.name,
+          branchName: stock.shop.branch?.name,
+          quantity: netAvailableQuantity,
+          availableBoxes,
+          remainingPieces,
+          boxSize,
+          hasBox: stock.product.hasBox,
+          basePrice,
+          additionalPrices: shopAdditionalPrices.map((ap) => ({
+            id: ap.id,
+            label: ap.label,
+            price: ap.price,
+            isGlobal: ap.shopId === null,
+          })),
+          totalPrice,
+          UnitOfMeasure: stock.product.UnitOfMeasure,
+        };
+
+        console.log('Shop data created:', JSON.stringify(shopData, null, 2));
+        shopsMap.set(stock.shop.id, shopData);
+      }
+    });
+
+    console.log('\n--- Final shops map ---');
+    console.log('Number of shops:', shopsMap.size);
+
+    // Get product details for box support info
+    console.log('\nFetching product details...');
+    const product = await prisma.product.findUnique({
+      where: { id: productId },
+      select: {
+        hasBox: true,
+        boxSize: true,
+        UnitOfMeasure: true,
+        name: true,
+        productCode: true,
+      },
+    });
+
+    console.log('Product details:', JSON.stringify(product, null, 2));
+
+    const result = {
+      totalAvailableQuantity,
+      shops: Array.from(shopsMap.values()),
+      hasStock: totalAvailableQuantity > 0,
+      product: {
+        hasBox: product?.hasBox || false,
+        boxSize: product?.boxSize || null,
+        UnitOfMeasure: product?.UnitOfMeasure || 'unit',
+        name: product?.name,
+        productCode: product?.productCode,
+      },
+    };
+
+    console.log('\n=== getProductByShops END ===');
+    return result;
+  } catch (error) {
+    console.error('=== getProductByShops ERROR ===');
+    console.error('Error type:', error.constructor.name);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+
+    if (error.code) {
+      console.error('Prisma error code:', error.code);
+    }
+    if (error.meta) {
+      console.error('Prisma error meta:', error.meta);
+    }
+
+    throw error;
   }
-
-  return {
-    totalAvailableQuantity,
-    shops: shopsArray,
-    hasStock: totalAvailableQuantity > 0,
-    _metadata: {
-      totalShops: userId ? totalShopsInSystem : shopsArray.length,
-      accessibleShops: shopsArray.length,
-      hasRestrictedAccess: userId
-        ? shopsArray.length < totalShopsInSystem
-        : false,
-      userHasAccess: userId ? userShopIds.length > 0 : null,
-      message: userId
-        ? `Showing ${shopsArray.length} of ${totalShopsInSystem} shops with available stock`
-        : 'Showing all shops with available stock',
-    },
-  };
 };
-
-// Alternative function that explicitly requires userId
-const getProductBatchesByShopsForUser = async (productId, userId) => {
-  if (!userId) {
-    throw new Error('User ID is required for this function');
-  }
-
-  return getProductBatchesByShopsUser(productId, userId);
-};
-
 module.exports = {
-  createProductBatch,
   getProductById,
   getProductByCode,
   getAllProducts,
   createProduct,
   updateProduct,
   deleteProduct,
-  getBatchesByProduct,
   getActiveAllProducts,
-  createProductBatchsingle,
   getProductDetails,
-  getProductBatchesByShops,
   getTopSellingProducts,
   getRandomProductsWithShopStocks,
-  getProductBatchesByShopsForUser,
+  getProductByShops,
 };

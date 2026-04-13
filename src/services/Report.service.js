@@ -178,12 +178,6 @@ const getAllSells = async ({
     include: {
       product: true,
       shop: true,
-      unitOfMeasure: true,
-      batches: {
-        include: {
-          batch: true,
-        },
-      },
     },
   };
 
@@ -244,6 +238,9 @@ const generateSalesReports = async ({
   limit = 10,
   slowMoveThreshold = 10,
 } = {}) => {
+  console.log('=== generateSalesReports START ===');
+  console.log('Parameters:', { startDate, endDate, shopId, branchId, limit, slowMoveThreshold });
+
   // Default date range: last 12 months
   const twelveMonthsAgo = subMonths(new Date(), 12);
 
@@ -274,7 +271,7 @@ const generateSalesReports = async ({
   }
 
   try {
-    // Get ALL products with their sales data first
+    // Get ALL products with their sales data from SellItem (no batch table anymore)
     const allProductsSales = await prisma.sellItem.groupBy({
       by: ['productId'],
       where: {
@@ -292,6 +289,8 @@ const generateSalesReports = async ({
         },
       },
     });
+
+    console.log('Products with sales found:', allProductsSales.length);
 
     if (allProductsSales.length === 0) {
       return {
@@ -338,10 +337,10 @@ const generateSalesReports = async ({
     );
 
     const slowMovingItems = allProductsSales
-      .filter((item) => (item._sum.quantity || 0) > 0) // Exclude zero quantities
-      .filter((item) => (item._sum.quantity || 0) <= slowMoveThreshold) // Below threshold
-      .filter((item) => !topProductIds.has(item.productId)) // Exclude top items
-      .sort((a, b) => (a._sum.quantity || 0) - (b._sum.quantity || 0)) // Sort by lowest quantity first
+      .filter((item) => (item._sum.quantity || 0) > 0)
+      .filter((item) => (item._sum.quantity || 0) <= slowMoveThreshold)
+      .filter((item) => !topProductIds.has(item.productId))
+      .sort((a, b) => (a._sum.quantity || 0) - (b._sum.quantity || 0))
       .slice(0, limit);
 
     // 4. Top Sellers (Users with most sales)
@@ -363,21 +362,6 @@ const generateSalesReports = async ({
       take: limit,
     });
 
-    // Get batch-level data for detailed reporting
-    const batchSalesData = await prisma.sellItemBatch.groupBy({
-      by: ['batchId'],
-      where: {
-        sellItem: {
-          sell: sellWhereClause,
-          ...(shopId && { shopId }),
-          itemSaleStatus: 'DELIVERED',
-        },
-      },
-      _sum: {
-        quantity: true,
-      },
-    });
-
     // Enrich product data
     const enrichProductData = async (productGroups) => {
       const productIds = productGroups
@@ -392,29 +376,28 @@ const generateSalesReports = async ({
         },
         include: {
           category: true,
-          subCategory: true,
-          unitOfMeasure: true,
-          batches: {
-            include: {
-              product: true,
-            },
-            orderBy: {
-              createdAt: 'desc',
-            },
-            take: 1, // Get only the most recent batch for display
-          },
+          brand: true,
         },
       });
 
+      console.log(`Enriched ${products.length} products for reporting`);
+
       return productGroups.map((item) => {
         const product = products.find((p) => p.id === item.productId);
-        const latestBatch = product?.batches?.[0] || null;
-
+        
         // Calculate average price per unit
         const avgPrice =
           item._sum.quantity > 0
             ? (item._sum.totalPrice || 0) / item._sum.quantity
             : 0;
+
+        // Calculate box quantity if product supports boxes
+        let boxQuantity = 0;
+        let remainingPieces = item._sum.quantity || 0;
+        if (product?.hasBox && product?.boxSize && product.boxSize > 0) {
+          boxQuantity = Math.floor((item._sum.quantity || 0) / product.boxSize);
+          remainingPieces = (item._sum.quantity || 0) % product.boxSize;
+        }
 
         return {
           productId: item.productId,
@@ -422,9 +405,13 @@ const generateSalesReports = async ({
           quantity: item._sum.quantity || 0,
           revenue: item._sum.totalPrice || 0,
           avgPrice: parseFloat(avgPrice.toFixed(2)),
-          batchNumber: latestBatch?.batchNumber || 'N/A',
-          expiryDate: latestBatch?.expiryDate || null,
+          hasBox: product?.hasBox || false,
+          boxSize: product?.boxSize || null,
+          boxQuantity,
+          remainingPieces,
+          UnitOfMeasure: product?.UnitOfMeasure || 'unit',
           category: product?.category?.name || 'N/A',
+          brand: product?.brand?.name || 'N/A',
           valueScore:
             (item._sum.quantity || 0) * parseFloat(avgPrice.toFixed(2)),
         };
@@ -480,6 +467,9 @@ const generateSalesReports = async ({
       .sort((a, b) => b.valueScore - a.valueScore)
       .slice(0, limit);
 
+    console.log('Reports generated successfully');
+    console.log('=== generateSalesReports END ===');
+
     return {
       reportPeriod: {
         startDate: startDateObj,
@@ -507,6 +497,8 @@ const generateSalesReports = async ({
       },
     };
   } catch (error) {
+    console.error('=== generateSalesReports ERROR ===');
+    console.error('Error:', error);
     throw new Error(`Failed to generate sales reports: ${error.message}`);
   }
 };

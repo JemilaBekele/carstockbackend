@@ -18,8 +18,6 @@ const getTransferById = async (id) => {
       items: {
         include: {
           product: true,
-          batch: true,
-          unitOfMeasure: true, // ✅ Added unit of measure
         },
       },
     },
@@ -218,13 +216,12 @@ const createTransfer = async (transferBody, userId) => {
     );
   }
 
-  // Validate individual item properties (removed unitOfMeasureId check)
+  // Validate individual item properties
   items.forEach((item, index) => {
-    if (!item.productId || !item.batchId) {
-      // Removed !item.unitOfMeasureId
+    if (!item.productId) {
       throw new ApiError(
         httpStatus.BAD_REQUEST,
-        `Item ${index + 1} is missing required fields (productId or batchId)`, // Updated message
+        `Item ${index + 1} is missing required fields (productId)`,
       );
     }
     if (item.quantity <= 0) {
@@ -233,39 +230,20 @@ const createTransfer = async (transferBody, userId) => {
         `Item ${index + 1} has invalid quantity`,
       );
     }
-  });
-
-  // Get all product IDs to fetch their unit of measures
-  const productIds = items.map((item) => item.productId);
-  const products = await prisma.product.findMany({
-    where: {
-      id: {
-        in: productIds,
-      },
-    },
-    select: {
-      id: true,
-      unitOfMeasureId: true,
-    },
-  });
-
-  // Create a map of productId to unitOfMeasureId
-  const productUnitMap = {};
-  products.forEach((product) => {
-    productUnitMap[product.id] = product.unitOfMeasureId;
-  });
-
-  // Check if all products were found
-  items.forEach((item, index) => {
-    if (!productUnitMap[item.productId]) {
+    // Validate isBox if provided (should be boolean)
+    if (item.isBox !== undefined && typeof item.isBox !== 'boolean') {
       throw new ApiError(
         httpStatus.BAD_REQUEST,
-        `Item ${
-          index + 1
-        }: Product not found or has no unit of measure defined`,
+        `Item ${index + 1} has invalid isBox value (must be boolean)`,
       );
     }
   });
+
+  // Process items with isBox and calculate piece quantities for validation
+  const validatedItems = items.map((item) => ({
+    ...item,
+    isBox: item.isBox || false, // Default to false if not provided
+  }));
 
   // Clean up empty string values
   const cleanedTransferBody = {
@@ -341,10 +319,9 @@ const createTransfer = async (transferBody, userId) => {
       ...cleanedTransferBody,
       createdById: userId,
       items: {
-        create: items.map((item) => ({
+        create: validatedItems.map((item) => ({
           productId: item.productId,
-          batchId: item.batchId,
-          unitOfMeasureId: productUnitMap[item.productId], // Use the product's unit of measure
+          isBox: item.isBox, // Add isBox field
           quantity: item.quantity,
         })),
       },
@@ -352,17 +329,20 @@ const createTransfer = async (transferBody, userId) => {
     include: {
       items: {
         include: {
-          unitOfMeasure: true,
           product: true,
-          batch: true,
         },
       },
+      sourceStore: true,
+      sourceShop: true,
+      destStore: true,
+      destShop: true,
+      createdBy: true,
     },
   });
 
   return transfer;
 };
-// Update Transfer
+
 // Update Transfer
 const updateTransfer = async (transferId, transferBody, userId) => {
   // Check if transfer exists
@@ -412,12 +392,10 @@ const updateTransfer = async (transferId, transferBody, userId) => {
 
   // Validate individual item properties
   items.forEach((item, index) => {
-    if (!item.productId || !item.batchId || !item.unitOfMeasureId) {
+    if (!item.productId) {
       throw new ApiError(
         httpStatus.BAD_REQUEST,
-        `Item ${
-          index + 1
-        } is missing required fields (productId, batchId, or unitOfMeasureId)`,
+        `Item ${index + 1} is missing required fields (productId)`,
       );
     }
     if (item.quantity <= 0) {
@@ -426,7 +404,20 @@ const updateTransfer = async (transferId, transferBody, userId) => {
         `Item ${index + 1} has invalid quantity`,
       );
     }
+    // Validate isBox if provided (should be boolean)
+    if (item.isBox !== undefined && typeof item.isBox !== 'boolean') {
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        `Item ${index + 1} has invalid isBox value (must be boolean)`,
+      );
+    }
   });
+
+  // Process items with isBox
+  const validatedItems = items.map((item) => ({
+    ...item,
+    isBox: item.isBox || false, // Default to false if not provided
+  }));
 
   // Clean up empty string values
   const cleanedTransferBody = {
@@ -508,10 +499,9 @@ const updateTransfer = async (transferId, transferBody, userId) => {
       data: {
         ...cleanedTransferBody,
         items: {
-          create: items.map((item) => ({
+          create: validatedItems.map((item) => ({
             productId: item.productId,
-            batchId: item.batchId,
-            unitOfMeasureId: item.unitOfMeasureId,
+            isBox: item.isBox, // Add isBox field
             quantity: item.quantity,
           })),
         },
@@ -519,9 +509,14 @@ const updateTransfer = async (transferId, transferBody, userId) => {
       include: {
         items: {
           include: {
-            unitOfMeasure: true,
+            product: true,
           },
         },
+        sourceStore: true,
+        sourceShop: true,
+        destStore: true,
+        destShop: true,
+        createdBy: true,
       },
     });
 
@@ -575,12 +570,11 @@ const deleteTransfer = async (id, userId) => {
               }),
               tx.stockLedger.create({
                 data: {
-                  batchId: item.batchId,
                   storeId: existingTransfer.sourceStoreId,
                   invoiceNo: `REV-${sourceInvoiceNo}`,
                   movementType: 'IN',
                   quantity: item.quantity,
-                  unitOfMeasureId: item.unitOfMeasureId,
+
                   reference: `TRANSFER-REVERSAL-${existingTransfer.shortCode}`,
                   userId,
                   notes: `Transfer reversal - stock returned from ${existingTransfer.destinationType.toLowerCase()}`,
@@ -606,12 +600,10 @@ const deleteTransfer = async (id, userId) => {
               }),
               tx.stockLedger.create({
                 data: {
-                  batchId: item.batchId,
                   invoiceNo: `REV-${sourceInvoiceNo}`,
                   shopId: existingTransfer.sourceShopId,
                   movementType: 'IN',
                   quantity: item.quantity,
-                  unitOfMeasureId: item.unitOfMeasureId,
                   reference: `TRANSFER-REVERSAL-${existingTransfer.shortCode}`,
                   userId,
                   notes: `Transfer reversal - stock returned from ${existingTransfer.destinationType.toLowerCase()}`,
@@ -671,12 +663,10 @@ const deleteTransfer = async (id, userId) => {
             operations.push(
               tx.stockLedger.create({
                 data: {
-                  batchId: item.batchId,
                   invoiceNo: `REV-${destinationInvoiceNo}`,
                   storeId: existingTransfer.destStoreId,
                   movementType: 'OUT',
                   quantity: item.quantity,
-                  unitOfMeasureId: item.unitOfMeasureId,
                   reference: `TRANSFER-REVERSAL-${existingTransfer.shortCode}`,
                   userId,
                   notes: `Transfer reversal - stock returned to ${existingTransfer.sourceType.toLowerCase()}`,
@@ -733,12 +723,10 @@ const deleteTransfer = async (id, userId) => {
             operations.push(
               tx.stockLedger.create({
                 data: {
-                  batchId: item.batchId,
                   invoiceNo: `REV-${destinationInvoiceNo}`,
                   shopId: existingTransfer.destShopId,
                   movementType: 'OUT',
                   quantity: item.quantity,
-                  unitOfMeasureId: item.unitOfMeasureId,
                   reference: `TRANSFER-REVERSAL-${existingTransfer.shortCode}`,
                   userId,
                   notes: `Transfer reversal - stock returned to ${existingTransfer.sourceType.toLowerCase()}`,
@@ -795,7 +783,6 @@ const deleteTransfer = async (id, userId) => {
 };
 
 // Complete Transfer
-// Complete Transfer
 const completeTransfer = async (transferId, userId) => {
   const transfer = await getTransferById(transferId);
 
@@ -811,193 +798,318 @@ const completeTransfer = async (transferId, userId) => {
   }
 
   const result = await prisma.$transaction(async (tx) => {
-    // Get all unit of measures for the transfer items
-    const unitOfMeasureIds = transfer.items.map((item) => item.unitOfMeasureId);
-    const unitOfMeasures = await tx.unitOfMeasure.findMany({
-      where: { id: { in: unitOfMeasureIds } },
-    });
-
-    const unitOfMeasureMap = unitOfMeasures.reduce((acc, uom) => {
-      acc[uom.id] = uom;
-      return acc;
-    }, {});
-
-    // Get base units for all products to check if we need conversion
+    // Get all products with their box support info
     const productIds = transfer.items.map((item) => item.productId);
-    const baseUnits = await tx.unitOfMeasure.findMany({
+    const products = await tx.product.findMany({
       where: {
-        base: true,
-        products: {
-          some: {
-            id: { in: productIds },
-          },
-        },
+        id: { in: productIds },
+      },
+      select: {
+        id: true,
+        name: true,
+        hasBox: true,
+        boxSize: true,
       },
     });
 
-    const baseUnitMap = {};
-    baseUnits.forEach((unit) => {
-      productIds.forEach((productId) => {
-        baseUnitMap[productId] = unit;
-      });
+    const productMap = {};
+    products.forEach((product) => {
+      productMap[product.id] = product;
     });
 
     // Prepare all operations for each transfer item
-    const operations = transfer.items.map((item, index) => {
-      const unitOfMeasure = unitOfMeasureMap[item.unitOfMeasureId];
+    const sourceOperations = [];
+    const destinationOperations = [];
+    const stockLedgerOperations = [];
 
-      if (!unitOfMeasure) {
+    for (let index = 0; index < transfer.items.length; index++) {
+      const item = transfer.items[index];
+      const product = productMap[item.productId];
+
+      if (!product) {
         throw new ApiError(
           httpStatus.BAD_REQUEST,
-          `Unit of measure not found for item ${item.id}`,
+          `Product not found for item ${item.id}`,
         );
       }
 
-      const quantityToUse = item.quantity;
-      const itemOperations = [];
+      // Calculate piece quantity based on isBox flag
+      let pieceQuantity = item.quantity;
 
-      // Create unique invoice numbers for each ledger entry by appending item index and movement type
+      if (item.isBox) {
+        // If isBox is true, convert boxes to pieces using product's boxSize
+        if (!product.hasBox) {
+          throw new ApiError(
+            httpStatus.BAD_REQUEST,
+            `Product "${product.name}" does not support box/packaging. Please enable box support for this product.`,
+          );
+        }
+
+        if (!product.boxSize || product.boxSize <= 0) {
+          throw new ApiError(
+            httpStatus.BAD_REQUEST,
+            `Product "${product.name}" has invalid box size (${product.boxSize}). Please configure box size correctly.`,
+          );
+        }
+
+        pieceQuantity = item.quantity * product.boxSize;
+
+        console.log(`📦 Product: ${product.name}`);
+        console.log(`   Transfer quantity: ${item.quantity} box(es)`);
+        console.log(`   Box size: ${product.boxSize} pieces/box`);
+        console.log(`   Total pieces: ${pieceQuantity}`);
+        console.log(
+          `   Calculation: ${item.quantity} × ${product.boxSize} = ${pieceQuantity}`,
+        );
+      } else {
+        pieceQuantity = item.quantity;
+        console.log(`📦 Product: ${product.name}`);
+        console.log(`   Transfer quantity: ${item.quantity} piece(s)`);
+        console.log(`   Total pieces: ${pieceQuantity}`);
+      }
+
+      // Validate piece quantity is positive
+      if (pieceQuantity <= 0) {
+        throw new ApiError(
+          httpStatus.BAD_REQUEST,
+          `Invalid quantity for product "${product.name}". Quantity must be greater than 0.`,
+        );
+      }
+
+      // Create unique invoice numbers for each ledger entry
       const sourceInvoiceNo = `${transfer.shortCode}-OUT-${index}`;
       const destinationInvoiceNo = `${transfer.shortCode}-IN-${index}`;
 
-      // Remove stock from source operations
+      // ========== SOURCE OPERATIONS (Remove stock) ==========
       if (transfer.sourceType === 'STORE' && transfer.sourceStoreId) {
-        itemOperations.push(
+        // Get current source stock
+        const sourceStock = await tx.storeStock.findUnique({
+          where: {
+            storeId_productId: {
+              storeId: transfer.sourceStoreId,
+              productId: item.productId,
+            },
+          },
+        });
+
+        if (!sourceStock) {
+          throw new ApiError(
+            httpStatus.BAD_REQUEST,
+            `Product "${product.name}" not found in source store stock`,
+          );
+        }
+
+        if (sourceStock.quantity < pieceQuantity) {
+          throw new ApiError(
+            httpStatus.BAD_REQUEST,
+            `Insufficient stock for product "${product.name}". Available: ${sourceStock.quantity} pieces, Requested: ${pieceQuantity} pieces`,
+          );
+        }
+
+        const newSourceQuantity = sourceStock.quantity - pieceQuantity;
+        console.log(`   Source store current: ${sourceStock.quantity} pieces`);
+        console.log(
+          `   Source store after removal: ${newSourceQuantity} pieces`,
+        );
+
+        sourceOperations.push(
           tx.storeStock.update({
             where: {
-              storeId_batchId: {
+              storeId_productId: {
                 storeId: transfer.sourceStoreId,
-                batchId: item.batchId,
+                productId: item.productId,
               },
             },
             data: {
-              quantity: { decrement: quantityToUse },
+              quantity: { decrement: pieceQuantity },
             },
           }),
+        );
+
+        stockLedgerOperations.push(
           tx.stockLedger.create({
             data: {
-              batchId: item.batchId,
+              productId: item.productId,
               storeId: transfer.sourceStoreId,
-              invoiceNo: sourceInvoiceNo, // Use unique invoice number
-              movementType: 'OUT',
-              quantity: quantityToUse,
-              unitOfMeasureId: item.unitOfMeasureId,
-              reference: `TRANSFER-${transfer.shortCode}`,
+              movementType: 'TRANSFER',
+              pieceQuantity,
+              boxQuantity: item.isBox ? item.quantity : 0,
+              reference: transfer.reference || `TRANSFER-${transfer.shortCode}`,
               userId,
-              notes: `Transfer out to ${transfer.destinationType.toLowerCase()}`,
+              notes: item.isBox
+                ? `Transfer OUT - ${transfer.shortCode} (${item.quantity} box(es) × ${product.boxSize} = ${pieceQuantity} pieces)`
+                : `Transfer OUT - ${transfer.shortCode} (${item.quantity} piece(s))`,
               movementDate: new Date(),
             },
           }),
         );
       } else if (transfer.sourceType === 'SHOP' && transfer.sourceShopId) {
-        itemOperations.push(
+        // Get current source stock
+        const sourceStock = await tx.shopStock.findUnique({
+          where: {
+            shopId_productId: {
+              shopId: transfer.sourceShopId,
+              productId: item.productId,
+            },
+          },
+        });
+
+        if (!sourceStock) {
+          throw new ApiError(
+            httpStatus.BAD_REQUEST,
+            `Product "${product.name}" not found in source shop stock`,
+          );
+        }
+
+        if (sourceStock.quantity < pieceQuantity) {
+          throw new ApiError(
+            httpStatus.BAD_REQUEST,
+            `Insufficient stock for product "${product.name}". Available: ${sourceStock.quantity} pieces, Requested: ${pieceQuantity} pieces`,
+          );
+        }
+
+        const newSourceQuantity = sourceStock.quantity - pieceQuantity;
+        console.log(`   Source shop current: ${sourceStock.quantity} pieces`);
+        console.log(
+          `   Source shop after removal: ${newSourceQuantity} pieces`,
+        );
+
+        sourceOperations.push(
           tx.shopStock.update({
             where: {
-              shopId_batchId: {
+              shopId_productId: {
                 shopId: transfer.sourceShopId,
-                batchId: item.batchId,
+                productId: item.productId,
               },
             },
             data: {
-              quantity: { decrement: quantityToUse },
+              quantity: { decrement: pieceQuantity },
             },
           }),
+        );
+
+        stockLedgerOperations.push(
           tx.stockLedger.create({
             data: {
-              batchId: item.batchId,
-              invoiceNo: sourceInvoiceNo, // Use unique invoice number
+              productId: item.productId,
               shopId: transfer.sourceShopId,
-              movementType: 'OUT',
-              quantity: quantityToUse,
-              unitOfMeasureId: item.unitOfMeasureId,
+              movementType: 'TRANSFER',
+              pieceQuantity,
+              boxQuantity: item.isBox ? item.quantity : 0,
               reference: transfer.reference || `TRANSFER-${transfer.shortCode}`,
               userId,
-              notes: `Transfer out to ${transfer.destinationType.toLowerCase()}`,
+              notes: item.isBox
+                ? `Transfer OUT - ${transfer.shortCode} (${item.quantity} box(es) × ${product.boxSize} = ${pieceQuantity} pieces)`
+                : `Transfer OUT - ${transfer.shortCode} (${item.quantity} piece(s))`,
               movementDate: new Date(),
             },
           }),
         );
       }
 
-      // Add stock to destination operations
+      // ========== DESTINATION OPERATIONS (Add stock) ==========
       if (transfer.destinationType === 'STORE' && transfer.destStoreId) {
-        itemOperations.push(
+        destinationOperations.push(
           tx.storeStock.upsert({
             where: {
-              storeId_batchId: {
+              storeId_productId: {
                 storeId: transfer.destStoreId,
-                batchId: item.batchId,
+                productId: item.productId,
               },
             },
             update: {
-              quantity: { increment: quantityToUse },
+              quantity: { increment: pieceQuantity },
             },
             create: {
               storeId: transfer.destStoreId,
-              batchId: item.batchId,
-              quantity: quantityToUse,
-              unitOfMeasureId: item.unitOfMeasureId,
+              productId: item.productId,
+              quantity: pieceQuantity,
               status: 'Available',
             },
           }),
+        );
+
+        stockLedgerOperations.push(
           tx.stockLedger.create({
             data: {
-              batchId: item.batchId,
-              invoiceNo: destinationInvoiceNo, // Use unique invoice number
+              productId: item.productId,
               storeId: transfer.destStoreId,
-              movementType: 'IN',
-              quantity: quantityToUse,
-              unitOfMeasureId: item.unitOfMeasureId,
+              movementType: 'TRANSFER',
+              pieceQuantity,
+              boxQuantity: item.isBox ? item.quantity : 0,
               reference: transfer.reference || `TRANSFER-${transfer.shortCode}`,
               userId,
-              notes: `Transfer in from ${transfer.sourceType.toLowerCase()}`,
+              notes: item.isBox
+                ? `Transfer IN - ${transfer.shortCode} (${item.quantity} box(es) × ${product.boxSize} = ${pieceQuantity} pieces)`
+                : `Transfer IN - ${transfer.shortCode} (${item.quantity} piece(s))`,
               movementDate: new Date(),
             },
           }),
         );
       } else if (transfer.destinationType === 'SHOP' && transfer.destShopId) {
-        itemOperations.push(
+        destinationOperations.push(
           tx.shopStock.upsert({
             where: {
-              shopId_batchId: {
+              shopId_productId: {
                 shopId: transfer.destShopId,
-                batchId: item.batchId,
+                productId: item.productId,
               },
             },
             update: {
-              quantity: { increment: quantityToUse },
+              quantity: { increment: pieceQuantity },
             },
             create: {
               shopId: transfer.destShopId,
-              batchId: item.batchId,
-              quantity: quantityToUse,
-              unitOfMeasureId: item.unitOfMeasureId,
+              productId: item.productId,
+              quantity: pieceQuantity,
               status: 'Available',
             },
           }),
+        );
+
+        stockLedgerOperations.push(
           tx.stockLedger.create({
             data: {
-              batchId: item.batchId,
-              invoiceNo: destinationInvoiceNo, // Use unique invoice number
+              productId: item.productId,
               shopId: transfer.destShopId,
-              movementType: 'IN',
-              quantity: quantityToUse,
-              unitOfMeasureId: item.unitOfMeasureId,
+              movementType: 'TRANSFER',
+              pieceQuantity,
+              boxQuantity: item.isBox ? item.quantity : 0,
               reference: transfer.reference || `TRANSFER-${transfer.shortCode}`,
               userId,
-              notes: `Transfer in from ${transfer.sourceType.toLowerCase()}`,
+              notes: item.isBox
+                ? `Transfer IN - ${transfer.shortCode} (${item.quantity} box(es) × ${product.boxSize} = ${pieceQuantity} pieces)`
+                : `Transfer IN - ${transfer.shortCode} (${item.quantity} piece(s))`,
               movementDate: new Date(),
             },
           }),
         );
       }
 
-      return itemOperations;
-    });
+      console.log(`   ✅ Stock operations prepared`);
+      console.log(`   ---`);
+    }
 
-    // Flatten all operations and execute them in parallel
-    const allOperations = operations.flat();
-    await Promise.all(allOperations);
+    // Execute all operations in parallel
+    await Promise.all([
+      ...sourceOperations,
+      ...destinationOperations,
+      ...stockLedgerOperations,
+    ]);
+
+    // Calculate total pieces transferred
+    let totalPiecesTransferred = 0;
+    for (const item of transfer.items) {
+      const product = productMap[item.productId];
+      if (item.isBox) {
+        totalPiecesTransferred += item.quantity * product.boxSize;
+      } else {
+        totalPiecesTransferred += item.quantity;
+      }
+    }
+
+    console.log(`🎉 Transfer ${transfer.shortCode} completed successfully!`);
+    console.log(`   Total pieces transferred: ${totalPiecesTransferred}`);
 
     // Update transfer status to COMPLETED
     const updatedTransfer = await tx.transfer.update({
@@ -1006,14 +1118,29 @@ const completeTransfer = async (transferId, userId) => {
         status: 'COMPLETED',
         updatedById: userId,
       },
+      include: {
+        items: {
+          include: {
+            product: true,
+          },
+        },
+        sourceStore: true,
+        sourceShop: true,
+        destStore: true,
+        destShop: true,
+        createdBy: true,
+        updatedBy: true,
+      },
     });
 
     // Create log entry
     await tx.log.create({
       data: {
-        action: `Completed transfer ${transfer.reference || transfer.id} with ${
+        action: `Completed transfer ${
+          transfer.reference || transfer.shortCode
+        } with ${
           transfer.items.length
-        } items`,
+        } items. Total pieces transferred: ${totalPiecesTransferred}`,
         userId,
       },
     });

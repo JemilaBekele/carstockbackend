@@ -14,8 +14,6 @@ const getPurchaseById = async (id) => {
       items: {
         include: {
           product: true,
-          batch: true,
-          unitOfMeasure: true, // ✅ Added unit of measure
         },
       },
     },
@@ -109,12 +107,10 @@ const createPurchase = async (purchaseBody, userId) => {
 
   // Validate individual item properties
   items.forEach((item, index) => {
-    if (!item.productId || !item.batchId || !item.unitOfMeasureId) {
+    if (!item.productId) {
       throw new ApiError(
         httpStatus.BAD_REQUEST,
-        `Item ${
-          index + 1
-        } is missing required fields (productId, batchId, or unitOfMeasureId)`,
+        `Item ${index + 1} is missing required fields (productId)`,
       );
     }
     if (item.quantity <= 0) {
@@ -129,11 +125,19 @@ const createPurchase = async (purchaseBody, userId) => {
         `Item ${index + 1} has invalid unit price`,
       );
     }
+    // Validate isBox if provided (should be boolean)
+    if (item.isBox !== undefined && typeof item.isBox !== 'boolean') {
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        `Item ${index + 1} has invalid isBox value (must be boolean)`,
+      );
+    }
   });
 
-  // Recalculate totalPrice for security
+  // Recalculate totalPrice for security and process isBox
   const validatedItems = items.map((item) => ({
     ...item,
+    isBox: item.isBox || false, // Default to false if not provided
     totalPrice: item.quantity * item.unitPrice,
   }));
 
@@ -167,8 +171,7 @@ const createPurchase = async (purchaseBody, userId) => {
         items: {
           create: validatedItems.map((item) => ({
             productId: item.productId,
-            batchId: item.batchId,
-            unitOfMeasureId: item.unitOfMeasureId,
+            isBox: item.isBox, // Add isBox field
             quantity: item.quantity,
             unitPrice: item.unitPrice,
             totalPrice: item.totalPrice,
@@ -179,8 +182,6 @@ const createPurchase = async (purchaseBody, userId) => {
         items: {
           include: {
             product: true,
-            batch: true,
-            unitOfMeasure: true,
           },
         },
         supplier: true,
@@ -238,12 +239,10 @@ const updatePurchase = async (purchaseId, purchaseBody, userId) => {
 
   // Validate individual item properties
   items.forEach((item, index) => {
-    if (!item.productId || !item.batchId || !item.unitOfMeasureId) {
+    if (!item.productId) {
       throw new ApiError(
         httpStatus.BAD_REQUEST,
-        `Item ${
-          index + 1
-        } is missing required fields (productId, batchId, or unitOfMeasureId)`,
+        `Item ${index + 1} is missing required fields (productId)`,
       );
     }
     if (item.quantity <= 0) {
@@ -258,11 +257,19 @@ const updatePurchase = async (purchaseId, purchaseBody, userId) => {
         `Item ${index + 1} has invalid unit price`,
       );
     }
+    // Validate isBox if provided (should be boolean)
+    if (item.isBox !== undefined && typeof item.isBox !== 'boolean') {
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        `Item ${index + 1} has invalid isBox value (must be boolean)`,
+      );
+    }
   });
 
-  // Recalculate totalPrice for security
+  // Recalculate totalPrice for security and process isBox
   const validatedItems = items.map((item) => ({
     ...item,
+    isBox: item.isBox || false, // Default to false if not provided
     totalPrice: item.quantity * item.unitPrice,
   }));
 
@@ -306,8 +313,7 @@ const updatePurchase = async (purchaseId, purchaseBody, userId) => {
         items: {
           create: validatedItems.map((item) => ({
             productId: item.productId,
-            batchId: item.batchId,
-            unitOfMeasureId: item.unitOfMeasureId,
+            isBox: item.isBox, // Add isBox field
             quantity: item.quantity,
             unitPrice: item.unitPrice,
             totalPrice: item.totalPrice,
@@ -318,8 +324,6 @@ const updatePurchase = async (purchaseId, purchaseBody, userId) => {
         items: {
           include: {
             product: true,
-            batch: true,
-            unitOfMeasure: true,
           },
         },
         supplier: true,
@@ -332,7 +336,6 @@ const updatePurchase = async (purchaseId, purchaseBody, userId) => {
 
   return result;
 };
-
 // Delete Purchase
 const deletePurchase = async (id, userId) => {
   const existingPurchase = await getPurchaseById(id);
@@ -374,11 +377,10 @@ const deletePurchase = async (id, userId) => {
           operations.push(
             tx.stockLedger.create({
               data: {
-                batchId: item.batchId,
                 storeId: existingPurchase.storeId,
                 movementType: 'OUT',
                 quantity: item.quantity,
-                unitOfMeasureId: item.unitOfMeasureId,
+
                 reference: `PURCHASE-DELETE-${existingPurchase.invoiceNo}`,
                 userId,
                 notes: `Stock reversed from deleted purchase ${existingPurchase.invoiceNo}`,
@@ -470,8 +472,7 @@ const acceptPurchase = async (purchaseId, paymentStatus, userId) => {
       include: {
         items: {
           include: {
-            batch: true,
-            unitOfMeasure: true,
+            product: true, // Include product to access boxSize and hasBox
           },
         },
         store: true,
@@ -507,17 +508,17 @@ const acceptPurchase = async (purchaseId, paymentStatus, userId) => {
     if (paymentStatus === 'APPROVED') {
       const result = await prisma.$transaction(async (tx) => {
         // Get all existing store stocks in one query
-        const batchIds = purchase.items.map((item) => item.batchId);
+        const productIds = purchase.items.map((item) => item.productId);
         const existingStoreStocks = await tx.storeStock.findMany({
           where: {
             storeId: purchase.storeId,
-            batchId: { in: batchIds },
+            productId: { in: productIds },
           },
         });
 
         const existingStoreStockMap = existingStoreStocks.reduce(
           (acc, stock) => {
-            acc[stock.batchId] = stock;
+            acc[stock.productId] = stock;
             return acc;
           },
           {},
@@ -526,81 +527,135 @@ const acceptPurchase = async (purchaseId, paymentStatus, userId) => {
         // Prepare all operations
         const storeStockOperations = [];
         const stockLedgerOperations = [];
-        const batchUpdateOperations = [];
 
-        purchase.items.forEach((item) => {
-          const { quantity, unitOfMeasureId, batchId } = item;
+        for (const item of purchase.items) {
+          const { quantity, product, isBox } = item;
+
+          // Calculate piece quantity based on isBox flag
+          let pieceQuantity = quantity;
+
+          if (isBox) {
+            // If isBox is true, convert boxes to pieces using product's boxSize
+            if (!product.hasBox) {
+              throw new ApiError(
+                httpStatus.BAD_REQUEST,
+                `Product "${product.name}" does not support box/packaging. Please enable box support for this product.`,
+              );
+            }
+
+            if (!product.boxSize || product.boxSize <= 0) {
+              throw new ApiError(
+                httpStatus.BAD_REQUEST,
+                `Product "${product.name}" has invalid box size (${product.boxSize}). Please configure box size correctly.`,
+              );
+            }
+
+            pieceQuantity = quantity * product.boxSize;
+
+            console.log(`📦 Product: ${product.name}`);
+            console.log(`   Purchase quantity: ${quantity} box(es)`);
+            console.log(`   Box size: ${product.boxSize} pieces/box`);
+            console.log(`   Total pieces added to stock: ${pieceQuantity}`);
+            console.log(
+              `   Calculation: ${quantity} × ${product.boxSize} = ${pieceQuantity}`,
+            );
+          } else {
+            // If isBox is false, it's already in pieces
+            pieceQuantity = quantity;
+            console.log(`📦 Product: ${product.name}`);
+            console.log(`   Purchase quantity: ${quantity} piece(s)`);
+            console.log(`   Total pieces added to stock: ${pieceQuantity}`);
+          }
+
+          // Validate piece quantity is positive
+          if (pieceQuantity <= 0) {
+            throw new ApiError(
+              httpStatus.BAD_REQUEST,
+              `Invalid quantity for product "${product.name}". Quantity must be greater than 0.`,
+            );
+          }
 
           // Store stock operations
-          const existingStoreStock = existingStoreStockMap[batchId];
+          const existingStoreStock = existingStoreStockMap[product.id];
           if (existingStoreStock) {
+            const newQuantity = existingStoreStock.quantity + pieceQuantity;
+            console.log(
+              `   Current stock: ${existingStoreStock.quantity} pieces`,
+            );
+            console.log(`   New stock after addition: ${newQuantity} pieces`);
+
             // Update existing store stock
             storeStockOperations.push(
               tx.storeStock.update({
                 where: { id: existingStoreStock.id },
                 data: {
-                  quantity: { increment: quantity },
-                  // Ensure status remains Available when updating
+                  quantity: { increment: pieceQuantity },
                   status: 'Available',
-                  unitOfMeasureId,
                 },
               }),
             );
           } else {
+            console.log(`   Initial stock: 0 pieces`);
+            console.log(`   New stock after addition: ${pieceQuantity} pieces`);
+
             // Create new store stock with Available status
             storeStockOperations.push(
               tx.storeStock.create({
                 data: {
                   storeId: purchase.storeId,
-                  batchId,
-                  quantity,
+                  productId: product.id,
+                  quantity: pieceQuantity,
                   status: 'Available',
-                  unitOfMeasureId,
                 },
               }),
             );
           }
 
-          // Stock ledger operations
+          // Stock ledger operations - record both box and piece quantities
           stockLedgerOperations.push(
             tx.stockLedger.create({
               data: {
-                batchId,
+                productId: product.id,
                 storeId: purchase.storeId,
                 movementType: 'IN',
-                quantity,
-                unitOfMeasureId,
+                pieceQuantity,
+                boxQuantity: isBox ? quantity : 0, // Record box quantity if applicable
                 reference: purchase.invoiceNo,
                 userId,
-                notes: `Purchase acceptance - ${purchase.invoiceNo}`,
+                notes: isBox
+                  ? `Purchase acceptance - ${purchase.invoiceNo} (${quantity} box(es) × ${product.boxSize} = ${pieceQuantity} pieces)`
+                  : `Purchase acceptance - ${purchase.invoiceNo} (${quantity} piece(s))`,
                 movementDate: purchase.purchaseDate,
               },
             }),
           );
 
-          // Batch update operations - increment batch stock
-          batchUpdateOperations.push(
-            tx.productBatch.update({
-              where: { id: batchId },
-              data: {
-                stock: { increment: quantity },
-              },
-            }),
-          );
-        });
+          console.log(`   ✅ Stock ledger entry created`);
+          console.log(`   ---`);
+        }
 
         // Execute all operations in parallel
-        const [storeStockUpdates, stockLedgerEntries, batchUpdates] =
-          await Promise.all([
-            Promise.all(storeStockOperations),
-            Promise.all(stockLedgerOperations),
-            Promise.all(batchUpdateOperations),
-          ]);
+        const [storeStockUpdates, stockLedgerEntries] = await Promise.all([
+          Promise.all(storeStockOperations),
+          Promise.all(stockLedgerOperations),
+        ]);
+
+        // Calculate total pieces added
+        const totalPiecesAdded = purchase.items.reduce((total, item) => {
+          const { quantity, product, isBox } = item;
+          if (isBox) {
+            return total + quantity * product.boxSize;
+          }
+          return total + quantity;
+        }, 0);
+
+        console.log(`🎉 Purchase ${purchase.invoiceNo} accepted successfully!`);
+        console.log(`   Total pieces added to stock: ${totalPiecesAdded}`);
 
         // Create log entry
         await tx.log.create({
           data: {
-            action: `Accepted purchase ${purchase.invoiceNo} with ${purchase.items.length} items`,
+            action: `Accepted purchase ${purchase.invoiceNo} with ${purchase.items.length} items. Total pieces added: ${totalPiecesAdded}`,
             userId,
           },
         });
@@ -609,14 +664,14 @@ const acceptPurchase = async (purchaseId, paymentStatus, userId) => {
           purchase: updatedPurchase,
           stockLedgerEntries,
           storeStockUpdates,
-          batchUpdates,
+          totalPiecesAdded,
         };
       });
 
       return result;
     }
 
-    // For non-PAID status, just update the payment status and return
+    // For non-APPROVED status, just update the payment status and return
     await prisma.log.create({
       data: {
         action: `Updated payment status of purchase ${purchase.invoiceNo} to ${paymentStatus}`,
@@ -626,9 +681,11 @@ const acceptPurchase = async (purchaseId, paymentStatus, userId) => {
 
     return {
       purchase: updatedPurchase,
-      message: `Payment status updated to ${paymentStatus}. No stock created as purchase is not fully paid.`,
+      message: `Payment status updated to ${paymentStatus}. No stock created as purchase is not fully approved.`,
     };
   } catch (error) {
+    console.error('❌ Error in acceptPurchase:', error);
+
     // Handle transaction errors specifically
     if (error.code === 'P2025') {
       throw new ApiError(
@@ -636,7 +693,16 @@ const acceptPurchase = async (purchaseId, paymentStatus, userId) => {
         'Related record not found during transaction',
       );
     }
-    throw error;
+
+    // Re-throw ApiError as is
+    if (error instanceof ApiError) {
+      throw error;
+    }
+
+    throw new ApiError(
+      httpStatus.INTERNAL_SERVER_ERROR,
+      `Failed to accept purchase: ${error.message}`,
+    );
   }
 };
 module.exports = {

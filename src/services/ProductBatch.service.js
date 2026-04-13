@@ -270,6 +270,7 @@ const updateProductBatchWithAdditionalPrices = async (batchId, updateBody) => {
 };
 
 // Get product by store ID and stock ID
+// Get product by store ID
 const getProductByStoreStock = async (storeId) => {
   try {
     const storeStocks = await prisma.storeStock.findMany({
@@ -277,19 +278,13 @@ const getProductByStoreStock = async (storeId) => {
         storeId,
       },
       include: {
-        batch: {
+        product: {
           include: {
-            product: {
-              include: {
-                category: true,
-                subCategory: true,
-                unitOfMeasure: true, // Include unit of measure
-              },
-            },
+            category: true,
+            brand: true,
           },
         },
         store: true,
-        unitOfMeasure: true, // Include the unit of measure from store stock
       },
     });
 
@@ -297,12 +292,10 @@ const getProductByStoreStock = async (storeId) => {
       throw new Error(`No store stocks found for storeId: ${storeId}`);
     }
 
-    // Debug each stock to check for missing relations
+    // Filter out any stocks without product
     const validStocks = storeStocks.filter((stock) => {
-      if (!stock.batch) {
-        return false;
-      }
-      if (!stock.batch.product) {
+      if (!stock.product) {
+        console.warn(`Stock ${stock.id} has no product associated`);
         return false;
       }
       return true;
@@ -310,31 +303,25 @@ const getProductByStoreStock = async (storeId) => {
 
     // Return enriched data with all necessary information
     const result = validStocks.map((storeStock) => {
-      const { product } = storeStock.batch;
+      const { product } = storeStock;
 
       return {
         id: storeStock.id,
         storeId: storeStock.storeId,
-        batchId: storeStock.batchId,
+        productId: storeStock.productId,
         quantity: storeStock.quantity,
         status: storeStock.status,
         createdAt: storeStock.createdAt,
         updatedAt: storeStock.updatedAt,
 
         // Store information
-        store: {
-          id: storeStock.store.id,
-          name: storeStock.store.name,
-          branchId: storeStock.store.branchId,
-        },
-
-        // Batch information
-        batch: {
-          id: storeStock.batch.id,
-          batchNumber: storeStock.batch.batchNumber,
-          expiryDate: storeStock.batch.expiryDate,
-          price: storeStock.batch.price,
-        },
+        store: storeStock.store
+          ? {
+              id: storeStock.store.id,
+              name: storeStock.store.name,
+              branchId: storeStock.store.branchId,
+            }
+          : null,
 
         // Product information with all details
         product: {
@@ -346,21 +333,17 @@ const getProductByStoreStock = async (storeId) => {
           sellPrice: product.sellPrice,
           imageUrl: product.imageUrl,
           isActive: product.isActive,
+          hasBox: product.hasBox,
+          boxSize: product.boxSize,
+          UnitOfMeasure: product.UnitOfMeasure,
 
-          // Category and subcategory
+          // Category and brand
           category: product.category,
-          subCategory: product.subCategory,
-
-          // Unit of measure information from product
-          unitOfMeasure: product.unitOfMeasure,
+          brand: product.brand,
         },
 
-        // Unit of measure specific to this stock entry
-        unitOfMeasure: storeStock.unitOfMeasure,
-
         // Helper fields for frontend
-        availableQuantity: storeStock.quantity, // Original quantity
-        conversionFactor: storeStock.unitOfMeasure?.conversionFactor || 1,
+        availableQuantity: storeStock.quantity,
       };
     });
 
@@ -371,6 +354,7 @@ const getProductByStoreStock = async (storeId) => {
   }
 };
 
+// Get product by shop ID
 const getProductByShopStock = async (shopId) => {
   try {
     const shopStocks = await prisma.shopStock.findMany({
@@ -378,19 +362,13 @@ const getProductByShopStock = async (shopId) => {
         shopId,
       },
       include: {
-        batch: {
+        product: {
           include: {
-            product: {
-              include: {
-                category: true,
-                subCategory: true,
-                unitOfMeasure: true, // Include unit of measure
-              },
-            },
+            category: true,
+            brand: true,
           },
         },
         shop: true,
-        unitOfMeasure: true, // Include the unit of measure from shop stock
       },
     });
 
@@ -398,12 +376,10 @@ const getProductByShopStock = async (shopId) => {
       throw new Error(`No shop stocks found for shopId: ${shopId}`);
     }
 
-    // Debug each stock
+    // Filter out any stocks without product
     const validStocks = shopStocks.filter((stock) => {
-      if (!stock.batch) {
-        return false;
-      }
-      if (!stock.batch.product) {
+      if (!stock.product) {
+        console.warn(`Stock ${stock.id} has no product associated`);
         return false;
       }
       return true;
@@ -411,31 +387,25 @@ const getProductByShopStock = async (shopId) => {
 
     // Return enriched data with all necessary information
     const result = validStocks.map((shopStock) => {
-      const { product } = shopStock.batch;
+      const { product } = shopStock;
 
       return {
         id: shopStock.id,
         shopId: shopStock.shopId,
-        batchId: shopStock.batchId,
+        productId: shopStock.productId,
         quantity: shopStock.quantity,
         status: shopStock.status,
         createdAt: shopStock.createdAt,
         updatedAt: shopStock.updatedAt,
 
         // Shop information
-        shop: {
-          id: shopStock.shop.id,
-          name: shopStock.shop.name,
-          branchId: shopStock.shop.branchId,
-        },
-
-        // Batch information
-        batch: {
-          id: shopStock.batch.id,
-          batchNumber: shopStock.batch.batchNumber,
-          expiryDate: shopStock.batch.expiryDate,
-          price: shopStock.batch.price,
-        },
+        shop: shopStock.shop
+          ? {
+              id: shopStock.shop.id,
+              name: shopStock.shop.name,
+              branchId: shopStock.shop.branchId,
+            }
+          : null,
 
         // Product information with all details
         product: {
@@ -447,21 +417,17 @@ const getProductByShopStock = async (shopId) => {
           sellPrice: product.sellPrice,
           imageUrl: product.imageUrl,
           isActive: product.isActive,
+          hasBox: product.hasBox,
+          boxSize: product.boxSize,
+          UnitOfMeasure: product.UnitOfMeasure,
 
-          // Category and subcategory
+          // Category and brand
           category: product.category,
-          subCategory: product.subCategory,
-
-          // Unit of measure information from product
-          unitOfMeasure: product.unitOfMeasure,
+          brand: product.brand,
         },
 
-        // Unit of measure specific to this stock entry
-        unitOfMeasure: shopStock.unitOfMeasure,
-
         // Helper fields for frontend
-        availableQuantity: shopStock.quantity, // Original quantity
-        conversionFactor: shopStock.unitOfMeasure?.conversionFactor || 1,
+        availableQuantity: shopStock.quantity,
       };
     });
 
@@ -471,6 +437,7 @@ const getProductByShopStock = async (shopId) => {
     throw error;
   }
 };
+
 const getProductInfoByBatchId = async (batchId) => {
   const batch = await prisma.productBatch.findUnique({
     where: { id: batchId },

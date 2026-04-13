@@ -26,24 +26,7 @@ router.get(
   // checkPermission('CREATE_PRODUCT'), getRandomProductsWithShopStocks
   productController.getRandomProductsWithShopStocks,
 );
-router.post(
-  '/api/products/Batch/single',
-  auth,
-  // checkPermission('CREATE_PRODUCT'),
-  productController.createProductBatchsingle,
-);
-router.post(
-  '/api/products/:productId/batches',
-  auth,
-  // checkPermission('CREATE_PRODUCT_BATCH'), // Uncomment if you have permission checks
-  productController.createProductBatch,
-);
-router.get(
-  '/api/products/get/all/:productId/batches',
-  auth,
-  // checkPermission('VIEW_PRODUCT_BATCHES'), // Uncomment if you have permission checks
-  productController.getBatchesByProduct,
-);
+
 router.get(
   '/api/products/get/all/Top/Selling/Products',
   auth,
@@ -96,14 +79,8 @@ router.get(
   productController.getProductById,
 );
 router.get(
-  '/api/products/Batch/shop/find/ByShops/:productId',
+  '/api/products/shop/find/ByShops/:productId',
   auth, // if you need authentication
-  productController.getProductBatchesByShopsController,
-);
-//
-router.get(
-  '/api/products/Batch/shop/find/ByShops/ForUser/:productId',
-  auth, // if you need authentication
-  productController.getProductBatchesByShopsForUser,
+  productController.getProductByShops,
 );
 module.exports = router;

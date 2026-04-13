@@ -18,12 +18,7 @@ const getSellStockCorrectionById = async (id) => {
         include: {
           product: true,
           shop: true,
-          unitOfMeasure: true,
-          batches: {
-            include: {
-              batch: true,
-            },
-          },
+         
         },
       },
     },
@@ -185,16 +180,6 @@ const getSellStockCorrectionsBySellId = async (sellId) => {
         include: {
           product: true,
           shop: true,
-          unitOfMeasure: true,
-          batches: {
-            include: {
-              batch: {
-                include: {
-                  product: true,
-                },
-              },
-            },
-          },
         },
       },
     },
@@ -1404,7 +1389,6 @@ const approveSellStockCorrection = async (
 //   });
 // };
 // Reject SellStockCorrection
-
 
 const deleteSellStockCorrection = async (id, userId) => {
   console.log('=== Starting deleteSellStockCorrection ===');

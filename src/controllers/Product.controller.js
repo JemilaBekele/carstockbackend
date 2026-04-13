@@ -33,23 +33,7 @@ const createProduct = catchAsync(async (req, res) => {
     product,
   });
 });
-const createProductBatch = catchAsync(async (req, res) => {
-  const { productId } = req.params;
-  const batchData = req.body;
-  const userId = req.user.id; // Assuming user is attached to request during authentication
 
-  const productBatch = await productService.createProductBatch(
-    productId,
-    batchData,
-    userId,
-  );
-
-  res.status(httpStatus.CREATED).send({
-    success: true,
-    message: 'Product batch created successfully',
-    productBatch,
-  });
-});
 // Update Product
 const updateProduct = catchAsync(async (req, res) => {
   // Structure files by field name
@@ -95,14 +79,6 @@ const getProduct = catchAsync(async (req, res) => {
   });
 });
 
-const getBatchesByProduct = catchAsync(async (req, res) => {
-  const { productId } = req.params;
-  const result = await productService.getBatchesByProduct(productId);
-  res.status(httpStatus.OK).send({
-    success: true,
-    ...result,
-  });
-});
 // Get Product by Code
 const getProductByCode = catchAsync(async (req, res) => {
   const product = await productService.getProductByCode(req.params.code);
@@ -135,7 +111,7 @@ const getProducts = catchAsync(async (req, res) => {
   });
 });
 const getTopSellingProducts = catchAsync(async (req, res) => {
-  const { searchTerm, categoryName, subCategoryName } = req.query;
+  const { searchTerm, categoryName, brandName } = req.query;
   const userId = req.user.id;
 
   // Convert empty strings to null and ensure proper parameter assignment
@@ -143,10 +119,8 @@ const getTopSellingProducts = catchAsync(async (req, res) => {
     searchTerm && searchTerm.trim() !== '' ? searchTerm.trim() : null;
   const processedCategoryName =
     categoryName && categoryName.trim() !== '' ? categoryName.trim() : null;
-  const processedSubCategoryName =
-    subCategoryName && subCategoryName.trim() !== ''
-      ? subCategoryName.trim()
-      : null;
+  const processedBrandName =
+    brandName && brandName.trim() !== '' ? brandName.trim() : null;
 
   // DEBUG: Check if parameters are being mixed up
   if (processedSearchTerm && isValidUUID(processedSearchTerm)) {
@@ -155,24 +129,32 @@ const getTopSellingProducts = catchAsync(async (req, res) => {
     );
   }
 
-  // DEBUG: Check if category/subcategory names look like UUIDs
+  // DEBUG: Check if category name looks like UUID
   if (processedCategoryName && isValidUUID(processedCategoryName)) {
     console.warn(
       '⚠️ WARNING: categoryName looks like a UUID, did you mean to use the name?',
     );
   }
 
-  if (processedSubCategoryName && isValidUUID(processedSubCategoryName)) {
+  // DEBUG: Check if brand name looks like UUID
+  if (processedBrandName && isValidUUID(processedBrandName)) {
     console.warn(
-      '⚠️ WARNING: subCategoryName looks like a UUID, did you mean to use the name?',
+      '⚠️ WARNING: brandName looks like a UUID, did you mean to use the name?',
     );
   }
 
+  console.log('getTopSellingProducts params:', {
+    userId,
+    searchTerm: processedSearchTerm,
+    categoryName: processedCategoryName,
+    brandName: processedBrandName,
+  });
+
   const result = await productService.getTopSellingProducts(
     userId,
-    processedSearchTerm, // This should be the text search
-    processedCategoryName, // This should be the category name
-    processedSubCategoryName, // This should be the subcategory name
+    processedSearchTerm,
+    processedCategoryName,
+    processedBrandName,
   );
 
   res.status(httpStatus.OK).send({
@@ -203,14 +185,7 @@ const deleteProduct = catchAsync(async (req, res) => {
     message: 'Product deleted successfully',
   });
 });
-const createProductBatchsingle = catchAsync(async (req, res) => {
-  const productBatch = await productService.createProductBatchsingle(req.body);
-  res.status(httpStatus.CREATED).send({
-    success: true,
-    message: 'Product batch created successfully',
-    data: productBatch,
-  });
-});
+
 const getProductById = catchAsync(async (req, res) => {
   const { productId } = req.params;
   const userId = req.user.id;
@@ -225,52 +200,31 @@ const getProductById = catchAsync(async (req, res) => {
 
   res.status(httpStatus.OK).send({ product: productDetails });
 });
-const getProductBatchesByShopsController = catchAsync(async (req, res) => {
-  const { productId } = req.params;
 
-  const batches = await productService.getProductBatchesByShops(productId);
-
-  if (!batches || batches.length === 0) {
-    throw new ApiError(
-      httpStatus.NOT_FOUND,
-      'No available batches found for this product',
-    );
-  }
-  res.status(httpStatus.OK).send({ batches });
-});
-// getProductBatchesByShopsForUser
-const getProductBatchesByShopsForUser = catchAsync(async (req, res) => {
+const getProductByShops = catchAsync(async (req, res) => {
   const { productId } = req.params;
   const userId = req.user.id;
-  const batches = await productService.getProductBatchesByShopsForUser(
-    productId,
-    userId,
-  );
+  const products = await productService.getProductByShops(productId, userId);
 
-  if (!batches || batches.length === 0) {
+  if (!products || products.length === 0) {
     throw new ApiError(
       httpStatus.NOT_FOUND,
-      'No available batches found for this product',
+      'No available products found for this product',
     );
   }
 
-  res.status(httpStatus.OK).send({ batches });
+  res.status(httpStatus.OK).send({ products });
 });
-
 module.exports = {
-  createProductBatch,
   createProduct,
   getProduct,
   getProductByCode,
   getProducts,
   updateProduct,
   deleteProduct,
-  getBatchesByProduct,
-  createProductBatchsingle,
   getProductById,
-  getProductBatchesByShopsController,
   getTopSellingProducts,
   getActiveAllProducts,
   getRandomProductsWithShopStocks,
-  getProductBatchesByShopsForUser,
+  getProductByShops,
 };

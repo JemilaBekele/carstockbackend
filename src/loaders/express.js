@@ -22,7 +22,7 @@ const customerRouter = require('../routes/Customer.route');
 const shopRouter = require('../routes/Shop.route');
 const storeRouter = require('../routes/Store.route');
 const ResetRouter = require('../routes/yearend.route');
-
+const BrandRouter = require('../routes/Brand.route');
 const CartRoutes = require('../routes/Cart.route');
 const GeneralDashboardRouter = require('../routes/GeneralDashboard.route');
 const purchaseRouter = require('../routes/purchase.route');
@@ -79,14 +79,14 @@ module.exports = async (app) => {
   if (env === 'production') {
     app.use(
       cors({
-        origin: ['https://ordere.net', 'http://localhost:3000'],
+        origin: ['http://localhost:3000'],
         credentials: true,
       }),
     );
     app.options(
       '*',
       cors({
-        origin: ['https://ordere.net', 'http://localhost:3000'],
+        origin: [ 'http://localhost:3000'],
         credentials: true,
       }),
     );
@@ -102,7 +102,7 @@ module.exports = async (app) => {
   app.use(rolePermissionRouter);
   app.use(companyRouter);
   app.use(GeneralDashboardRouter);
-
+  app.use(BrandRouter);
   app.use(documentRouter);
   app.use(CategoryRouter);
   app.use(branchRouter);
