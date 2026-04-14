@@ -12,31 +12,33 @@ const prisma = require('./prisma'); // Keep if rate limiting is used
 
 // Using RateLimiterMemory instead of RateLimiterMongo since Prisma handles DB access
 // For production, consider Redis-based rate limiter
+const rateLimiterOptions = {
+  blockDuration: 60 * 60 * 24,
+};
+
+const emailIpBruteLimiter = new RateLimiterMemory({
+  ...rateLimiterOptions,
+  points: config.rateLimiter.maxAttemptsByIpUsername,
+  duration: 60 * 10,
+});
+
+const slowerBruteLimiter = new RateLimiterMemory({
+  ...rateLimiterOptions,
+  points: config.rateLimiter.maxAttemptsPerDay,
+  duration: 60 * 60 * 24,
+});
+
+const emailBruteLimiter = new RateLimiterMemory({
+  ...rateLimiterOptions,
+  points: config.rateLimiter.maxAttemptsPerEmail,
+  duration: 60 * 60 * 24,
+});
+
+const normalizeIpAddress = (ipAddr) => String(ipAddr || 'unknown_ip');
+
 const login = async (email, password, ipAddr) => {
-  // Rate limiting logic
-  const rateLimiterOptions = {
-    blockDuration: 60 * 60 * 24, // Block for 1 day
-  };
-
-  const emailIpBruteLimiter = new RateLimiterMemory({
-    ...rateLimiterOptions,
-    points: config.rateLimiter.maxAttemptsByIpUsername,
-    duration: 60 * 10, // 10 minutes
-  });
-
-  const slowerBruteLimiter = new RateLimiterMemory({
-    ...rateLimiterOptions,
-    points: config.rateLimiter.maxAttemptsPerDay,
-    duration: 60 * 60 * 24,
-  });
-
-  const emailBruteLimiter = new RateLimiterMemory({
-    ...rateLimiterOptions,
-    points: config.rateLimiter.maxAttemptsPerEmail,
-    duration: 60 * 60 * 24,
-  });
-
-  const promises = [slowerBruteLimiter.consume(ipAddr)];
+  const normalizedIp = normalizeIpAddress(ipAddr);
+  const promises = [slowerBruteLimiter.consume(normalizedIp)];
 
   // Find user with role, permissions, and branch
   const user = await prisma.user.findUnique({
@@ -61,7 +63,7 @@ const login = async (email, password, ipAddr) => {
     if (user) {
       // Only consume email/ip limiters if a user with the email exists
       promises.push(
-        emailIpBruteLimiter.consume(`${email}_${ipAddr}`),
+        emailIpBruteLimiter.consume(`${email}_${normalizedIp}`),
         emailBruteLimiter.consume(email),
       );
     }
@@ -105,30 +107,8 @@ const login = async (email, password, ipAddr) => {
   return formattedUser;
 };
 const Storelogin = async (email, password, ipAddr) => {
-  // Rate limiting logic
-  const rateLimiterOptions = {
-    blockDuration: 60 * 60 * 24, // Block for 1 day
-  };
-
-  const emailIpBruteLimiter = new RateLimiterMemory({
-    ...rateLimiterOptions,
-    points: config.rateLimiter.maxAttemptsByIpUsername,
-    duration: 60 * 10, // 10 minutes
-  });
-
-  const slowerBruteLimiter = new RateLimiterMemory({
-    ...rateLimiterOptions,
-    points: config.rateLimiter.maxAttemptsPerDay,
-    duration: 60 * 60 * 24,
-  });
-
-  const emailBruteLimiter = new RateLimiterMemory({
-    ...rateLimiterOptions,
-    points: config.rateLimiter.maxAttemptsPerEmail,
-    duration: 60 * 60 * 24,
-  });
-
-  const promises = [slowerBruteLimiter.consume(ipAddr)];
+  const normalizedIp = normalizeIpAddress(ipAddr);
+  const promises = [slowerBruteLimiter.consume(normalizedIp)];
 
   // Find user with role, permissions, and branch
   const user = await prisma.user.findUnique({
@@ -153,7 +133,7 @@ const Storelogin = async (email, password, ipAddr) => {
   if (!user || !(await userService.isPasswordMatch(user, password))) {
     if (user) {
       promises.push(
-        emailIpBruteLimiter.consume(`${email}_${ipAddr}`),
+        emailIpBruteLimiter.consume(`${email}_${normalizedIp}`),
         emailBruteLimiter.consume(email),
       );
     }
@@ -197,30 +177,8 @@ const Storelogin = async (email, password, ipAddr) => {
   return formattedUser;
 };
 const Saleslogin = async (email, password, ipAddr) => {
-  // Rate limiting logic
-  const rateLimiterOptions = {
-    blockDuration: 60 * 60 * 24, // Block for 1 day
-  };
-
-  const emailIpBruteLimiter = new RateLimiterMemory({
-    ...rateLimiterOptions,
-    points: config.rateLimiter.maxAttemptsByIpUsername,
-    duration: 60 * 10, // 10 minutes
-  });
-
-  const slowerBruteLimiter = new RateLimiterMemory({
-    ...rateLimiterOptions,
-    points: config.rateLimiter.maxAttemptsPerDay,
-    duration: 60 * 60 * 24,
-  });
-
-  const emailBruteLimiter = new RateLimiterMemory({
-    ...rateLimiterOptions,
-    points: config.rateLimiter.maxAttemptsPerEmail,
-    duration: 60 * 60 * 24,
-  });
-
-  const promises = [slowerBruteLimiter.consume(ipAddr)];
+  const normalizedIp = normalizeIpAddress(ipAddr);
+  const promises = [slowerBruteLimiter.consume(normalizedIp)];
 
   // Find user with role, permissions, and branch
   const user = await prisma.user.findUnique({
@@ -245,7 +203,7 @@ const Saleslogin = async (email, password, ipAddr) => {
   if (!user || !(await userService.isPasswordMatch(user, password))) {
     if (user) {
       promises.push(
-        emailIpBruteLimiter.consume(`${email}_${ipAddr}`),
+        emailIpBruteLimiter.consume(`${email}_${normalizedIp}`),
         emailBruteLimiter.consume(email),
       );
     }

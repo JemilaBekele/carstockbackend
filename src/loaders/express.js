@@ -39,9 +39,10 @@ const { errorHandler, errorConverter } = require('../middlewares/error');
 const ApiError = require('../utils/ApiError');
 const morgan = require('../config/morgan');
 const { jwtStrategy } = require('../config/passport');
-const { cspOptions, env } = require('../config/config');
+const { cspOptions, env, cors: corsConfig, trustProxy } = require('../config/config');
 
 module.exports = async (app) => {
+  app.set('trust proxy', trustProxy);
   app.use(morgan.successHandler);
   app.use(morgan.errorHandler);
   // jwt authentication
@@ -76,25 +77,15 @@ module.exports = async (app) => {
     }),
   );
   app.use(mongoSanitize());
-  if (env === 'production') {
-    app.use(
-      cors({
-        origin: ['http://localhost:3000'],
+  const isProduction = env === 'production';
+  const corsOptions = isProduction
+    ? {
+        origin: corsConfig.allowedOrigins,
         credentials: true,
-      }),
-    );
-    app.options(
-      '*',
-      cors({
-        origin: [ 'http://localhost:3000'],
-        credentials: true,
-      }),
-    );
-  } else {
-    // enabling all cors
-    app.use(cors());
-    app.options('*', cors());
-  }
+      }
+    : { origin: true, credentials: true };
+  app.use(cors(corsOptions));
+  app.options('*', cors(corsOptions));
   app.use(ResetRouter);
   app.use(authRouter);
   app.use(rolesRouter);

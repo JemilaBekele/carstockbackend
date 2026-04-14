@@ -3,6 +3,14 @@ const catchAsync = require('../utils/catchAsync');
 const { userService, tokenService, authService } = require('../services');
 const ApiError = require('../utils/ApiError');
 
+const getClientIpAddress = (req) => {
+  const forwardedFor = req.headers['x-forwarded-for'];
+  if (typeof forwardedFor === 'string' && forwardedFor.length > 0) {
+    return forwardedFor.split(',')[0].trim();
+  }
+  return req.ip || req.connection?.remoteAddress || req.socket?.remoteAddress;
+};
+
 const createUser = catchAsync(async (req, res) => {
   const user = await userService.createUser(req.body);
   res.status(httpStatus.CREATED).send({ user });
@@ -64,7 +72,7 @@ const login = catchAsync(async (req, res) => {
   const user = await authService.login(
     email,
     password,
-    req.connection.remoteAddress,
+    getClientIpAddress(req),
   );
   // generate token ,Saleslogin,
   const tokens = await tokenService.generateAuthTokens(user.id);
@@ -75,7 +83,7 @@ const Storelogin = catchAsync(async (req, res) => {
   const user = await authService.Storelogin(
     email,
     password,
-    req.connection.remoteAddress,
+    getClientIpAddress(req),
   );
   // generate token Storelogin,,
   const tokens = await tokenService.generateAuthTokens(user.id);
@@ -86,7 +94,7 @@ const Saleslogin = catchAsync(async (req, res) => {
   const user = await authService.Saleslogin(
     email,
     password,
-    req.connection.remoteAddress,
+    getClientIpAddress(req),
   );
   // generate token Storelogin,Saleslogin,
   const tokens = await tokenService.generateAuthTokens(user.id);
@@ -129,6 +137,15 @@ const resetPassword = async (req, res, next) => {
     next(error);
   }
 };
+
+const refreshTokens = catchAsync(async (req, res) => {
+  const { refreshToken } = req.body;
+  if (!refreshToken) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'refreshToken is required');
+  }
+  const tokens = await authService.refreshAuthToken(refreshToken);
+  res.status(httpStatus.OK).send({ tokens });
+});
 module.exports = {
   createUser,
   getUsers,
@@ -143,4 +160,5 @@ module.exports = {
   resetPassword,
   Storelogin,
   Saleslogin,
+  refreshTokens,
 };

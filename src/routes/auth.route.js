@@ -86,6 +86,7 @@ router.post(
   // validate(userValidation.loginSchema),  Storelogin, Saleslogin,
   authController.Storelogin,
 );
+router.post('/api/auth/refresh-tokens', authController.refreshTokens);
 router.put(
   '/api/user/reset-password/:userId',
   auth,
