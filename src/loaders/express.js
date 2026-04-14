@@ -39,7 +39,12 @@ const { errorHandler, errorConverter } = require('../middlewares/error');
 const ApiError = require('../utils/ApiError');
 const morgan = require('../config/morgan');
 const { jwtStrategy } = require('../config/passport');
-const { cspOptions, env, cors: corsConfig, trustProxy } = require('../config/config');
+const {
+  cspOptions,
+  env,
+  cors: corsConfig,
+  trustProxy,
+} = require('../config/config');
 
 module.exports = async (app) => {
   app.set('trust proxy', trustProxy);

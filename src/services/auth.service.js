@@ -96,6 +96,7 @@ const login = async (email, password, ipAddr) => {
     shops: user.shops,
     stores: user.stores,
     // Include permissions
+    permissions: user.role?.permissions?.map((rp) => rp.permission.name) || [],
   };
 
   // Update last login time
@@ -166,6 +167,7 @@ const Storelogin = async (email, password, ipAddr) => {
     branch: user?.branch,
     shops: user.shops,
     stores: user.stores,
+    permissions: user.role?.permissions?.map((rp) => rp.permission.name) || [],
   };
 
   // Update last login time
@@ -236,6 +238,7 @@ const Saleslogin = async (email, password, ipAddr) => {
     branch: user?.branch,
     shops: user.shops,
     stores: user.stores,
+    permissions: user.role?.permissions?.map((rp) => rp.permission.name) || [],
   };
 
   // Update last login time

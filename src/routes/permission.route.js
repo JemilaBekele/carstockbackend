@@ -9,6 +9,7 @@ const { permissionController } = require('../controllers');
 router.get('/api/permissions', auth, permissionController.getAllPermissions);
 router.get(
   '/api/roles/:roleName/permissions',
+  auth,
   permissionController.getPermissionsByRoleName,
 );
 
