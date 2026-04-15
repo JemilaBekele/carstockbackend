@@ -82,15 +82,25 @@ module.exports = async (app) => {
     }),
   );
   app.use(mongoSanitize());
-  const isProduction = env === 'production';
-  const corsOptions = isProduction
-    ? {
-        origin: corsConfig.allowedOrigins,
+  if (env === 'production') {
+    app.use(
+      cors({
+        origin: ['http://system.ordere.net', 'http://localhost:3000'],
         credentials: true,
-      }
-    : { origin: true, credentials: true };
-  app.use(cors(corsOptions));
-  app.options('*', cors(corsOptions));
+      }),
+    );
+    app.options(
+      '*',
+      cors({
+        origin: ['http://system.ordere.net', 'http://localhost:3000'],
+        credentials: true,
+      }),
+    );
+  } else {
+    // enabling all cors
+    app.use(cors());
+    app.options('*', cors());
+  }
   app.use(ResetRouter);
   app.use(authRouter);
   app.use(rolesRouter);
