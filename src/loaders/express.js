@@ -85,14 +85,14 @@ module.exports = async (app) => {
   if (env === 'production') {
     app.use(
       cors({
-        origin: ['https://stock.ordere.net', 'http://localhost:3020'],
+        origin: ['https://system.ordere.net/', 'http://localhost:3020'],
         credentials: true,
       }),
     );
     app.options(
       '*',
       cors({
-        origin: ['https://stock.ordere.net/', 'http://localhost:3020'],
+        origin: ['https://system.ordere.net/', 'http://localhost:3020'],
         credentials: true,
       }),
     );
