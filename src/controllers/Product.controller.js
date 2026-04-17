@@ -5,6 +5,41 @@ const { productService } = require('../services');
 const ApiError = require('../utils/ApiError');
 
 // Create Product
+// Helper function to process product data
+const processProductData = (body) => {
+  const processedData = { ...body };
+
+  // Convert warningQuantity to number if it exists
+  if (
+    processedData.warningQuantity !== undefined &&
+    processedData.warningQuantity !== null
+  ) {
+    processedData.warningQuantity = Number(processedData.warningQuantity);
+  }
+
+  // Convert other numeric fields if needed
+  if (
+    processedData.sellPrice !== undefined &&
+    processedData.sellPrice !== null
+  ) {
+    processedData.sellPrice = Number(processedData.sellPrice);
+  }
+
+  if (processedData.boxSize !== undefined && processedData.boxSize !== null) {
+    processedData.boxSize = Number(processedData.boxSize);
+  }
+
+  // Convert boolean strings to actual booleans
+  if (processedData.isActive === 'true') processedData.isActive = true;
+  if (processedData.isActive === 'false') processedData.isActive = false;
+
+  if (processedData.hasBox === 'true') processedData.hasBox = true;
+  if (processedData.hasBox === 'false') processedData.hasBox = false;
+
+  return processedData;
+};
+
+// Create Product
 const createProduct = catchAsync(async (req, res) => {
   // Structure files by field name
   const structuredFiles = {};
@@ -25,7 +60,13 @@ const createProduct = catchAsync(async (req, res) => {
   // Ensure image field exists even if no file was uploaded
   structuredFiles.image = structuredFiles.image || undefined;
 
-  const product = await productService.createProduct(req.body, structuredFiles);
+  // Process the request body to convert types
+  const processedBody = processProductData(req.body);
+
+  const product = await productService.createProduct(
+    processedBody,
+    structuredFiles,
+  );
 
   res.status(httpStatus.CREATED).send({
     success: true,
@@ -55,9 +96,12 @@ const updateProduct = catchAsync(async (req, res) => {
   // Ensure image field exists even if no file was uploaded
   structuredFiles.image = structuredFiles.image || undefined;
 
+  // Process the request body to convert types
+  const processedBody = processProductData(req.body);
+
   const product = await productService.updateProduct(
     req.params.id,
-    req.body,
+    processedBody,
     structuredFiles,
   );
 
