@@ -143,51 +143,121 @@ const getAllProducts = async (userId) => {
       storeStocks[store.name] = 0;
     });
 
-    // Process shop stock
+    // Process shop stock - Convert box quantity to pieces if product has box
     product.shopStocks.forEach((stock) => {
       const shopName = shopMap[stock.shopId];
       if (shopName) {
-        shopStocks[shopName] = (shopStocks[shopName] || 0) + stock.quantity;
-        totalShopStock += stock.quantity;
+        let quantityInPieces = stock.quantity;
+
+        // If product has box, convert the stock quantity (which is stored in pieces) to pieces
+        // The stock.quantity is already stored in pieces in the database
+        quantityInPieces = stock.quantity;
+
+        shopStocks[shopName] = (shopStocks[shopName] || 0) + quantityInPieces;
+        totalShopStock += quantityInPieces;
       }
     });
 
-    // Process store stock
+    // Process store stock - Convert box quantity to pieces if product has box
     product.storeStocks.forEach((stock) => {
       const storeName = storeMap[stock.storeId];
       if (storeName) {
-        storeStocks[storeName] = (storeStocks[storeName] || 0) + stock.quantity;
-        totalStoreStock += stock.quantity;
+        let quantityInPieces = stock.quantity;
+
+        // If product has box, convert the stock quantity (which is stored in pieces) to pieces
+        quantityInPieces = stock.quantity;
+
+        storeStocks[storeName] =
+          (storeStocks[storeName] || 0) + quantityInPieces;
+        totalStoreStock += quantityInPieces;
       }
     });
 
-    // Convert shopStocks to include branch info
+    // Convert shopStocks to include branch info and also provide box/piece breakdown
     const shopStocksWithBranch = {};
-    Object.entries(shopStocks).forEach(([shopName, quantity]) => {
+    Object.entries(shopStocks).forEach(([shopName, quantityInPieces]) => {
       const shop = shops.find((s) => s.name === shopName);
       if (shop) {
+        // Calculate box and piece breakdown
+        let boxQuantity = 0;
+        let pieceQuantity = quantityInPieces;
+        let remainingPieces = quantityInPieces;
+
+        if (product.hasBox && product.boxSize && product.boxSize > 0) {
+          boxQuantity = Math.floor(quantityInPieces / product.boxSize);
+          pieceQuantity = quantityInPieces % product.boxSize;
+          remainingPieces = pieceQuantity;
+        }
+
         shopStocksWithBranch[shopName] = {
-          quantity,
+          quantity: quantityInPieces, // Total quantity in pieces
+          boxQuantity, // Number of full boxes
+          pieceQuantity, // Remaining pieces
+          boxSize: product.boxSize || 0, // Box size for reference
+          hasBox: product.hasBox,
           branchId: shop.branch?.id,
           branchName: shop.branch?.name,
+          displayText:
+            product.hasBox && product.boxSize
+              ? `${boxQuantity} box${boxQuantity !== 1 ? 'es' : ''}${
+                  pieceQuantity > 0
+                    ? ` + ${pieceQuantity} piece${
+                        pieceQuantity !== 1 ? 's' : ''
+                      }`
+                    : ''
+                }`
+              : `${quantityInPieces} piece${quantityInPieces !== 1 ? 's' : ''}`,
         };
       }
     });
 
-    // Convert storeStocks to include branch info
+    // Convert storeStocks to include branch info and also provide box/piece breakdown
     const storeStocksWithBranch = {};
-    Object.entries(storeStocks).forEach(([storeName, quantity]) => {
+    Object.entries(storeStocks).forEach(([storeName, quantityInPieces]) => {
       const store = stores.find((s) => s.name === storeName);
       if (store) {
+        // Calculate box and piece breakdown
+        let boxQuantity = 0;
+        let pieceQuantity = quantityInPieces;
+        let remainingPieces = quantityInPieces;
+
+        if (product.hasBox && product.boxSize && product.boxSize > 0) {
+          boxQuantity = Math.floor(quantityInPieces / product.boxSize);
+          pieceQuantity = quantityInPieces % product.boxSize;
+          remainingPieces = pieceQuantity;
+        }
+
         storeStocksWithBranch[storeName] = {
-          quantity,
+          quantity: quantityInPieces, // Total quantity in pieces
+          boxQuantity, // Number of full boxes
+          pieceQuantity, // Remaining pieces
+          boxSize: product.boxSize || 0, // Box size for reference
+          hasBox: product.hasBox,
           branchId: store.branch?.id,
           branchName: store.branch?.name,
+          displayText:
+            product.hasBox && product.boxSize
+              ? `${boxQuantity} box${boxQuantity !== 1 ? 'es' : ''}${
+                  pieceQuantity > 0
+                    ? ` + ${pieceQuantity} piece${
+                        pieceQuantity !== 1 ? 's' : ''
+                      }`
+                    : ''
+                }`
+              : `${quantityInPieces} piece${quantityInPieces !== 1 ? 's' : ''}`,
         };
       }
     });
 
     const totalStock = totalShopStock + totalStoreStock;
+
+    // Calculate total in boxes and pieces for display
+    let totalBoxes = 0;
+    let totalPieces = totalStock;
+    if (product.hasBox && product.boxSize && product.boxSize > 0) {
+      totalBoxes = Math.floor(totalStock / product.boxSize);
+      totalPieces = totalStock % product.boxSize;
+    }
 
     return {
       ...product,
@@ -197,6 +267,16 @@ const getAllProducts = async (userId) => {
         totalShopStock,
         totalStoreStock,
         totalStock,
+        totalBoxes,
+        totalPieces,
+        displayTotal:
+          product.hasBox && product.boxSize
+            ? `${totalBoxes} box${totalBoxes !== 1 ? 'es' : ''}${
+                totalPieces > 0
+                  ? ` + ${totalPieces} piece${totalPieces !== 1 ? 's' : ''}`
+                  : ''
+              }`
+            : `${totalStock} piece${totalStock !== 1 ? 's' : ''}`,
       },
     };
   });
@@ -1048,7 +1128,7 @@ const searchProducts = async (
 
     const filteredProducts = allProducts.filter((product) => {
       const nameMatch = product.name.toLowerCase().includes(searchTermLower);
-      
+
       let genericMatch = false;
       if (product.generic) {
         const genericTerms = product.generic
@@ -1072,18 +1152,19 @@ const searchProducts = async (
         .toLowerCase()
         .includes(searchTermLower);
 
-      const match = nameMatch || genericMatch || codeMatch || categoryMatch || brandMatch;
-      
+      const match =
+        nameMatch || genericMatch || codeMatch || categoryMatch || brandMatch;
+
       if (match) {
         console.log('Product matched:', product.name, {
           nameMatch,
           genericMatch,
           codeMatch,
           categoryMatch,
-          brandMatch
+          brandMatch,
         });
       }
-      
+
       return match;
     });
 
@@ -1157,7 +1238,11 @@ const getTopSellingProducts = async (
     // If search term is provided, use search functionality
     if (searchTerm) {
       console.log('Search term provided, calling searchProducts...');
-      const searchResult = await searchProducts(searchTerm, categoryId, brandId);
+      const searchResult = await searchProducts(
+        searchTerm,
+        categoryId,
+        brandId,
+      );
       console.log('Search result count:', searchResult.count);
       console.log('=== getTopSellingProducts END ===');
       return searchResult;
@@ -1207,15 +1292,20 @@ const getTopSellingProducts = async (
     console.log('Top selling products found:', topSellingProducts.length);
 
     if (topSellingProducts.length === 0) {
-      console.log('No top selling products, fetching random active products...');
-      
+      console.log(
+        'No top selling products, fetching random active products...',
+      );
+
       const whereClause = {
         isActive: true,
         ...(categoryId && { categoryId }),
         ...(brandId && { brandId }),
       };
-      console.log('Random products where clause:', JSON.stringify(whereClause, null, 2));
-      
+      console.log(
+        'Random products where clause:',
+        JSON.stringify(whereClause, null, 2),
+      );
+
       // Get random active products
       const randomProducts = await prisma.product.findMany({
         where: whereClause,

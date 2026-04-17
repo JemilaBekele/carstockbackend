@@ -1,5 +1,6 @@
 const httpStatus = require('http-status');
 const { subMonths } = require('date-fns');
+const path = require('path');
 const { getIO } = require('../socket/s');
 const ApiError = require('../utils/ApiError');
 const prisma = require('./prisma');
@@ -1843,7 +1844,6 @@ const getAllSellsuser = async ({
                 },
               },
               shop: true,
-           
             },
           },
           SellStockCorrection: {
@@ -1884,7 +1884,6 @@ const getAllSellsuser = async ({
                 },
               },
               shop: true,
-           
             },
           },
           SellStockCorrection: {
@@ -1925,7 +1924,6 @@ const getAllSellsuser = async ({
                 },
               },
               shop: true,
-           
             },
           },
           SellStockCorrection: {
@@ -1966,7 +1964,6 @@ const getAllSellsuser = async ({
                 },
               },
               shop: true,
-          
             },
           },
           SellStockCorrection: {
@@ -2007,7 +2004,6 @@ const getAllSellsuser = async ({
                 },
               },
               shop: true,
-        
             },
           },
           SellStockCorrection: {
@@ -2198,7 +2194,6 @@ const getAllSellsuser = async ({
             },
           },
           shop: true,
-       
         },
       },
       SellStockCorrection: {
@@ -2535,7 +2530,6 @@ const getAllSellsForStore = async ({
                     },
                   },
                   shop: true,
-             
                 },
               },
               SellStockCorrection: {
@@ -2580,7 +2574,6 @@ const getAllSellsForStore = async ({
                     },
                   },
                   shop: true,
-                
                 },
               },
               SellStockCorrection: {
@@ -2625,7 +2618,6 @@ const getAllSellsForStore = async ({
                     },
                   },
                   shop: true,
-                
                 },
               },
               SellStockCorrection: {
@@ -2804,7 +2796,6 @@ const getAllSellsForStore = async ({
               },
             },
             shop: true,
-           
           },
         },
         SellStockCorrection: {
@@ -3068,6 +3059,132 @@ const unlockSell = async (id) => {
 
   return sell;
 };
+// sell.service.js
+
+// Helper function to save file
+const addSellFiles = async (sellId, userId, structuredFiles = {}) => {
+
+
+  // Validate userId
+  if (!userId) {
+    throw new ApiError(httpStatus.UNAUTHORIZED, 'User ID is required');
+  }
+
+
+  // Check if sell exists
+  const existingSell = await prisma.sell.findUnique({
+    where: { id: sellId },
+    select: {
+      id: true,
+      invoiceNo: true,
+      imageUrl: true,
+      documentUrl: true,
+    },
+  });
+
+  if (!existingSell) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Sale not found');
+  }
+
+
+  try {
+    let { imageUrl } = existingSell;
+    let { documentUrl } = existingSell;
+
+    // Handle image upload from structuredFiles
+    if (structuredFiles.image && structuredFiles.image.length > 0) {
+      const imageFile = structuredFiles.image[0];
+      let fileUrl = imageFile.path;
+
+      // Convert Windows path to URL format
+      fileUrl = fileUrl.replace(/\\/g, '/');
+      // Extract the path after 'uploads'
+      const uploadsIndex = fileUrl.indexOf('/uploads/');
+      if (uploadsIndex !== -1) {
+        fileUrl = fileUrl.substring(uploadsIndex);
+      } else {
+        // If no 'uploads' in path, just use the filename
+        fileUrl = `/uploads/sell/images/${imageFile.filename}`;
+      }
+
+      imageUrl = fileUrl;
+    }
+
+    // Handle document upload from structuredFiles
+    if (structuredFiles.document && structuredFiles.document.length > 0) {
+      const documentFile = structuredFiles.document[0];
+      let fileUrl = documentFile.path;
+
+      // Convert Windows path to URL format
+      fileUrl = fileUrl.replace(/\\/g, '/');
+      // Extract the path after 'uploads'
+      const uploadsIndex = fileUrl.indexOf('/uploads/');
+      if (uploadsIndex !== -1) {
+        fileUrl = fileUrl.substring(uploadsIndex);
+      } else {
+        // If no 'uploads' in path, just use the filename
+        fileUrl = `/uploads/sell/documents/${documentFile.filename}`;
+      }
+
+      documentUrl = fileUrl;
+    }
+
+
+    // Update sell record with both files
+    const updatedSell = await prisma.$transaction(async (prismaTx) => {
+
+      const sell = await prismaTx.sell.update({
+        where: { id: sellId },
+        data: {
+          imageUrl,
+          documentUrl,
+        },
+      });
+
+
+      // Create log entry
+      const addedFiles = [];
+      if (structuredFiles.image && structuredFiles.image.length > 0)
+        addedFiles.push('image');
+      if (structuredFiles.document && structuredFiles.document.length > 0)
+        addedFiles.push('document');
+
+      if (addedFiles.length > 0) {
+        await prismaTx.log.create({
+          data: {
+            action: `Added/Updated ${addedFiles.join(' and ')} for sale ${
+              existingSell.invoiceNo
+            }`,
+            userId,
+          },
+        });
+      }
+
+      return sell;
+    });
+
+
+    return {
+      success: true,
+      message: `${structuredFiles.image ? 'Image' : ''}${
+        structuredFiles.image && structuredFiles.document ? ' and ' : ''
+      }${
+        structuredFiles.document ? 'Document' : ''
+      } added/updated successfully`,
+      data: updatedSell,
+    };
+  } catch (error) {
+
+    if (error.code) {
+      console.error('Prisma error code:', error.code);
+    }
+
+    throw new ApiError(
+      httpStatus.INTERNAL_SERVER_ERROR,
+      `Failed to add files to sale: ${error.message}`,
+    );
+  }
+};
 module.exports = {
   unlockSell,
   getSellById,
@@ -3087,4 +3204,5 @@ module.exports = {
   getAllSellsForStore,
   getAllSellsForStoreweb,
   getSellByIdByuser,
+  addSellFiles,
 };

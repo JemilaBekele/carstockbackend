@@ -137,6 +137,7 @@ model Shop {
   SellStockCorrectionItem SellStockCorrectionItem[]
   User User[] @relation("UserShops")
   notifications Notification[]
+  purchases Purchase[]
 }
 
 model Store {
@@ -392,8 +393,10 @@ model Purchase {
   invoiceNo      String           @unique                      // Invoice number
   supplierId     String           @db.Char(36)
   supplier       Supplier         @relation(fields: [supplierId], references: [id])
-  storeId        String           @db.Char(36)
-  store          Store            @relation(fields: [storeId], references: [id])
+  storeId        String?           @db.Char(36)
+  store          Store?            @relation(fields: [storeId], references: [id])
+  shopId      String?           @db.Char(36)
+  shop        Shop?             @relation(fields: [shopId], references: [id])
 
   paymentStatus  PaymentStatus    @default(PENDING)               // Paid, Pending, Partial, Unpaid
 
@@ -611,9 +614,12 @@ enum SaleStatus {
 model Sell {
   id             String          @id @default(uuid()) @map("_id") @db.Char(36)
   invoiceNo      String          @unique
+  imageUrl       String?
+  documentUrl    String?
+
   saleStatus     SaleStatus      @default(NOT_APPROVED)
- locked         Boolean         @default(false)
- lockedAt       DateTime?
+  locked         Boolean         @default(false)
+  lockedAt       DateTime?
   branchId       String?
   branch         Branch ?         @relation(fields: [branchId], references: [id])
 
