@@ -5,6 +5,7 @@ const router = express.Router();
 const { sellController } = require('../controllers');
 const auth = require('../middlewares/auth');
 const checkPermission = require('../middlewares/permission.middleware');
+const { debugUploadSellFiles } = require('../utils/multer');
 
 // Create a sell
 router.post('/api/sells', auth, sellController.createSell);
@@ -115,5 +116,37 @@ router.patch(
   checkPermission('CANCEL_SELL'),
   sellController.cancelSale,
 );
+router.put(
+  '/api/sell/:id/upload/file',
+  auth,
+  (req, res, next) => {
 
+    // Log raw chunks as they come in
+    const oldWrite = res.write;
+    const oldEnd = res.end;
+    const chunks = [];
+
+    req.on('data', (chunk) => {
+      chunks.push(chunk);
+    });
+
+    req.on('end', () => {
+      console.log(
+        'Request ended, total size:',
+        Buffer.concat(chunks).length,
+        'bytes',
+      );
+
+      // Log first 500 chars to see the boundary
+      const buffer = Buffer.concat(chunks);
+      const preview = buffer.toString('utf8', 0, Math.min(500, buffer.length));
+      console.log('First 500 chars of raw request:');
+      console.log(preview);
+    });
+
+    next();
+  },
+  debugUploadSellFiles,
+  sellController.addSellFiles,
+);
 module.exports = router;

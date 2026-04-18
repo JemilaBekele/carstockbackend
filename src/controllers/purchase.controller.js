@@ -5,6 +5,8 @@ const ApiError = require('../utils/ApiError');
 
 // Create Purchase
 const createPurchase = catchAsync(async (req, res) => {
+    console.log('=== CREATE PURCHASE DEBUG ===');
+
   const userId = req.user.id; // ✅ User ID from auth middleware
 
   const purchase = await purchaseService.createPurchase(req.body, userId);

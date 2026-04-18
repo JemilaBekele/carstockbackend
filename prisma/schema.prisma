@@ -137,6 +137,7 @@ model Shop {
   SellStockCorrectionItem SellStockCorrectionItem[]
   User User[] @relation("UserShops")
   notifications Notification[]
+  purchases Purchase[]
 }
 
 model Store {
@@ -312,6 +313,7 @@ model Category {
   
 @@map("categories") // Add this line if your table is actually called 'categories'
 }
+
 model Brand {
   id            String            @id @default(uuid()) @map("_id") @db.Char(36)
   name          String
@@ -333,8 +335,12 @@ model Product {
   description   String?
   categoryId    String
   category      Category       @relation(fields: [categoryId], references: [id])
+  
   warningQuantity Int?          @default(0)
-
+  // ✅ Oil Specific Fields
+  viscosity     String?        // Example: 0W-20, 5W-30
+  oilType       String?        // Fully Synthetic, Semi Synthetic, etc.
+  additiveType  String?        // Gasoline additive, Diesel additive, etc.
 
   sellPrice       Decimal ?        @db.Decimal(10, 2)
 
@@ -392,8 +398,10 @@ model Purchase {
   invoiceNo      String           @unique                      // Invoice number
   supplierId     String           @db.Char(36)
   supplier       Supplier         @relation(fields: [supplierId], references: [id])
-  storeId        String           @db.Char(36)
-  store          Store            @relation(fields: [storeId], references: [id])
+  storeId        String?           @db.Char(36)
+  store          Store?            @relation(fields: [storeId], references: [id])
+  shopId      String?           @db.Char(36)
+  shop        Shop?             @relation(fields: [shopId], references: [id])
 
   paymentStatus  PaymentStatus    @default(PENDING)               // Paid, Pending, Partial, Unpaid
 
@@ -611,9 +619,12 @@ enum SaleStatus {
 model Sell {
   id             String          @id @default(uuid()) @map("_id") @db.Char(36)
   invoiceNo      String          @unique
+  imageUrl       String?
+  documentUrl    String?
+
   saleStatus     SaleStatus      @default(NOT_APPROVED)
- locked         Boolean         @default(false)
- lockedAt       DateTime?
+  locked         Boolean         @default(false)
+  lockedAt       DateTime?
   branchId       String?
   branch         Branch ?         @relation(fields: [branchId], references: [id])
 

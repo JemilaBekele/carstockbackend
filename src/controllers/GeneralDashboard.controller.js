@@ -25,8 +25,16 @@ const getSellStatusPieChart = catchAsync(async (req, res) => {
     ...result,
   });
 });
-
+const getTopProductsReportWithPrediction = async (req, res) => {
+  const report =
+    await GeneralDashboardService.getTopProductsReportWithPrediction();
+  res.status(200).json({
+    success: true,
+    data: report,
+  });
+};
 module.exports = {
   getAllTotalsWithItems,
   getSellStatusPieChart,
+  getTopProductsReportWithPrediction,
 };

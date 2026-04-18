@@ -143,51 +143,121 @@ const getAllProducts = async (userId) => {
       storeStocks[store.name] = 0;
     });
 
-    // Process shop stock
+    // Process shop stock - Convert box quantity to pieces if product has box
     product.shopStocks.forEach((stock) => {
       const shopName = shopMap[stock.shopId];
       if (shopName) {
-        shopStocks[shopName] = (shopStocks[shopName] || 0) + stock.quantity;
-        totalShopStock += stock.quantity;
+        let quantityInPieces = stock.quantity;
+
+        // If product has box, convert the stock quantity (which is stored in pieces) to pieces
+        // The stock.quantity is already stored in pieces in the database
+        quantityInPieces = stock.quantity;
+
+        shopStocks[shopName] = (shopStocks[shopName] || 0) + quantityInPieces;
+        totalShopStock += quantityInPieces;
       }
     });
 
-    // Process store stock
+    // Process store stock - Convert box quantity to pieces if product has box
     product.storeStocks.forEach((stock) => {
       const storeName = storeMap[stock.storeId];
       if (storeName) {
-        storeStocks[storeName] = (storeStocks[storeName] || 0) + stock.quantity;
-        totalStoreStock += stock.quantity;
+        let quantityInPieces = stock.quantity;
+
+        // If product has box, convert the stock quantity (which is stored in pieces) to pieces
+        quantityInPieces = stock.quantity;
+
+        storeStocks[storeName] =
+          (storeStocks[storeName] || 0) + quantityInPieces;
+        totalStoreStock += quantityInPieces;
       }
     });
 
-    // Convert shopStocks to include branch info
+    // Convert shopStocks to include branch info and also provide box/piece breakdown
     const shopStocksWithBranch = {};
-    Object.entries(shopStocks).forEach(([shopName, quantity]) => {
+    Object.entries(shopStocks).forEach(([shopName, quantityInPieces]) => {
       const shop = shops.find((s) => s.name === shopName);
       if (shop) {
+        // Calculate box and piece breakdown
+        let boxQuantity = 0;
+        let pieceQuantity = quantityInPieces;
+        let remainingPieces = quantityInPieces;
+
+        if (product.hasBox && product.boxSize && product.boxSize > 0) {
+          boxQuantity = Math.floor(quantityInPieces / product.boxSize);
+          pieceQuantity = quantityInPieces % product.boxSize;
+          remainingPieces = pieceQuantity;
+        }
+
         shopStocksWithBranch[shopName] = {
-          quantity,
+          quantity: quantityInPieces, // Total quantity in pieces
+          boxQuantity, // Number of full boxes
+          pieceQuantity, // Remaining pieces
+          boxSize: product.boxSize || 0, // Box size for reference
+          hasBox: product.hasBox,
           branchId: shop.branch?.id,
           branchName: shop.branch?.name,
+          displayText:
+            product.hasBox && product.boxSize
+              ? `${boxQuantity} box${boxQuantity !== 1 ? 'es' : ''}${
+                  pieceQuantity > 0
+                    ? ` + ${pieceQuantity} piece${
+                        pieceQuantity !== 1 ? 's' : ''
+                      }`
+                    : ''
+                }`
+              : `${quantityInPieces} piece${quantityInPieces !== 1 ? 's' : ''}`,
         };
       }
     });
 
-    // Convert storeStocks to include branch info
+    // Convert storeStocks to include branch info and also provide box/piece breakdown
     const storeStocksWithBranch = {};
-    Object.entries(storeStocks).forEach(([storeName, quantity]) => {
+    Object.entries(storeStocks).forEach(([storeName, quantityInPieces]) => {
       const store = stores.find((s) => s.name === storeName);
       if (store) {
+        // Calculate box and piece breakdown
+        let boxQuantity = 0;
+        let pieceQuantity = quantityInPieces;
+        let remainingPieces = quantityInPieces;
+
+        if (product.hasBox && product.boxSize && product.boxSize > 0) {
+          boxQuantity = Math.floor(quantityInPieces / product.boxSize);
+          pieceQuantity = quantityInPieces % product.boxSize;
+          remainingPieces = pieceQuantity;
+        }
+
         storeStocksWithBranch[storeName] = {
-          quantity,
+          quantity: quantityInPieces, // Total quantity in pieces
+          boxQuantity, // Number of full boxes
+          pieceQuantity, // Remaining pieces
+          boxSize: product.boxSize || 0, // Box size for reference
+          hasBox: product.hasBox,
           branchId: store.branch?.id,
           branchName: store.branch?.name,
+          displayText:
+            product.hasBox && product.boxSize
+              ? `${boxQuantity} box${boxQuantity !== 1 ? 'es' : ''}${
+                  pieceQuantity > 0
+                    ? ` + ${pieceQuantity} piece${
+                        pieceQuantity !== 1 ? 's' : ''
+                      }`
+                    : ''
+                }`
+              : `${quantityInPieces} piece${quantityInPieces !== 1 ? 's' : ''}`,
         };
       }
     });
 
     const totalStock = totalShopStock + totalStoreStock;
+
+    // Calculate total in boxes and pieces for display
+    let totalBoxes = 0;
+    let totalPieces = totalStock;
+    if (product.hasBox && product.boxSize && product.boxSize > 0) {
+      totalBoxes = Math.floor(totalStock / product.boxSize);
+      totalPieces = totalStock % product.boxSize;
+    }
 
     return {
       ...product,
@@ -197,6 +267,16 @@ const getAllProducts = async (userId) => {
         totalShopStock,
         totalStoreStock,
         totalStock,
+        totalBoxes,
+        totalPieces,
+        displayTotal:
+          product.hasBox && product.boxSize
+            ? `${totalBoxes} box${totalBoxes !== 1 ? 'es' : ''}${
+                totalPieces > 0
+                  ? ` + ${totalPieces} piece${totalPieces !== 1 ? 's' : ''}`
+                  : ''
+              }`
+            : `${totalStock} piece${totalStock !== 1 ? 's' : ''}`,
       },
     };
   });
@@ -913,6 +993,9 @@ const getProductDetails = async (productId, userId) => {
         UnitOfMeasure: product.UnitOfMeasure,
         isActive: product.isActive,
         category: product.category,
+        viscosity: product.viscosity,
+        oilType: product.oilType,
+        additiveType: product.additiveType,
         brand: product.brand,
         createdAt: product.createdAt,
         updatedAt: product.updatedAt,
@@ -1005,16 +1088,38 @@ const searchProducts = async (
       }
     }
 
-    // Build where clause
+    // Build where clause for search - NO LIMIT on results
     const whereClause = {
       isActive: true,
       ...(categoryId && { categoryId }),
       ...(brandId && { brandId }),
+      ...(searchTerm &&
+        searchTerm.trim() !== '' && {
+          OR: [
+            { name: { contains: searchTerm, mode: 'insensitive' } },
+            { productCode: { contains: searchTerm, mode: 'insensitive' } },
+            { generic: { contains: searchTerm, mode: 'insensitive' } },
+            { viscosity: { contains: searchTerm, mode: 'insensitive' } },
+            { oilType: { contains: searchTerm, mode: 'insensitive' } },
+            { additiveType: { contains: searchTerm, mode: 'insensitive' } },
+            {
+              category: {
+                name: { contains: searchTerm, mode: 'insensitive' },
+              },
+            },
+            {
+              brand: {
+                name: { contains: searchTerm, mode: 'insensitive' },
+              },
+            },
+          ],
+        }),
     };
-    console.log('Where clause:', JSON.stringify(whereClause, null, 2));
 
-    // Get all products with filters
-    const allProducts = await prisma.product.findMany({
+    console.log('Search where clause:', JSON.stringify(whereClause, null, 2));
+
+    // Get ALL products that match the search criteria (no take/limit)
+    const matchedProducts = await prisma.product.findMany({
       where: whereClause,
       include: {
         category: true,
@@ -1029,70 +1134,19 @@ const searchProducts = async (
           },
         },
       },
+      // Remove any orderBy that might limit results
+      orderBy: {
+        name: 'asc', // Optional: sort alphabetically
+      },
     });
 
-    console.log('Products found with filters:', allProducts.length);
-
-    // If no search term, return all filtered products
-    if (!searchTerm) {
-      console.log('No search term, returning all filtered products');
-      return {
-        products: allProducts.map((product) => ({ product })),
-        count: allProducts.length,
-      };
-    }
-
-    // Manual case-insensitive filtering
-    const searchTermLower = searchTerm.toLowerCase().trim();
-    console.log('Search term lowercased:', searchTermLower);
-
-    const filteredProducts = allProducts.filter((product) => {
-      const nameMatch = product.name.toLowerCase().includes(searchTermLower);
-      
-      let genericMatch = false;
-      if (product.generic) {
-        const genericTerms = product.generic
-          .toLowerCase()
-          .split(',')
-          .map((term) => term.trim());
-        genericMatch = genericTerms.some((term) =>
-          term.includes(searchTermLower),
-        );
-      }
-
-      const codeMatch = product.productCode
-        .toLowerCase()
-        .includes(searchTermLower);
-
-      const categoryMatch = product.category?.name
-        .toLowerCase()
-        .includes(searchTermLower);
-
-      const brandMatch = product.brand?.name
-        .toLowerCase()
-        .includes(searchTermLower);
-
-      const match = nameMatch || genericMatch || codeMatch || categoryMatch || brandMatch;
-      
-      if (match) {
-        console.log('Product matched:', product.name, {
-          nameMatch,
-          genericMatch,
-          codeMatch,
-          categoryMatch,
-          brandMatch
-        });
-      }
-      
-      return match;
-    });
-
-    console.log('Filtered products count:', filteredProducts.length);
+    console.log(`Found ${matchedProducts.length} products matching search`);
     console.log('=== searchProducts END ===');
 
     return {
-      products: filteredProducts.map((product) => ({ product })),
-      count: filteredProducts.length,
+      products: matchedProducts.map((product) => ({ product })),
+      count: matchedProducts.length,
+      note: searchTerm ? 'Search results' : 'Filtered products',
     };
   } catch (error) {
     console.error('=== searchProducts ERROR ===');
@@ -1114,7 +1168,7 @@ const getTopSellingProducts = async (
     let categoryId = null;
     let brandId = null;
 
-    // If category name is provided, find the category ID
+    // Resolve category ID if provided
     if (categoryName) {
       console.log('Looking up category by name:', categoryName);
       const category = await prisma.category.findFirst({
@@ -1126,15 +1180,11 @@ const getTopSellingProducts = async (
         console.log('Category found with ID:', categoryId);
       } else {
         console.log('Category not found:', categoryName);
-        return {
-          products: [],
-          count: 0,
-          note: 'Category not found',
-        };
+        return { products: [], count: 0, note: 'Category not found' };
       }
     }
 
-    // If brand name is provided, find the brand ID
+    // Resolve brand ID if provided
     if (brandName) {
       console.log('Looking up brand by name:', brandName);
       const brand = await prisma.brand.findFirst({
@@ -1146,120 +1196,31 @@ const getTopSellingProducts = async (
         console.log('Brand found with ID:', brandId);
       } else {
         console.log('Brand not found:', brandName);
-        return {
-          products: [],
-          count: 0,
-          note: 'Brand not found',
-        };
+        return { products: [], count: 0, note: 'Brand not found' };
       }
     }
 
-    // If search term is provided, use search functionality
-    if (searchTerm) {
-      console.log('Search term provided, calling searchProducts...');
-      const searchResult = await searchProducts(searchTerm, categoryId, brandId);
-      console.log('Search result count:', searchResult.count);
-      console.log('=== getTopSellingProducts END ===');
+    // If search term provided, use searchProducts
+    if (searchTerm && searchTerm.trim() !== '') {
+      console.log('🔍 Search mode - using searchProducts');
+      const searchResult = await searchProducts(
+        searchTerm,
+        categoryId,
+        brandId,
+      );
       return searchResult;
     }
 
-    // Get user's accessible shops if userId is provided
-    let userAccessibleShopIds = [];
-    if (userId) {
-      console.log('Fetching user accessible shops for userId:', userId);
-      const userWithShops = await prisma.user.findUnique({
-        where: { id: userId },
-        select: {
-          shops: { select: { id: true } },
-        },
-      });
-      userAccessibleShopIds = userWithShops?.shops.map((shop) => shop.id) || [];
-      console.log('User accessible shop IDs:', userAccessibleShopIds);
-    }
+    // No search term - get products with filters
+    console.log('📊 Getting products with filters:', { categoryId, brandId });
 
-    // Get top selling products from sell items
-    console.log('Fetching top selling products...');
-    const topSellingProducts = await prisma.sellItem.groupBy({
-      by: ['productId'],
+    // Get ALL eligible products that match the filters
+    const allEligibleProducts = await prisma.product.findMany({
       where: {
-        OR: [
-          { itemSaleStatus: 'DELIVERED' },
-          {
-            sell: {
-              saleStatus: {
-                in: ['DELIVERED', 'APPROVED', 'PARTIALLY_DELIVERED'],
-              },
-            },
-          },
-        ],
-      },
-      _sum: {
-        quantity: true,
-      },
-      orderBy: {
-        _sum: {
-          quantity: 'desc',
-        },
-      },
-      take: 20,
-    });
-
-    console.log('Top selling products found:', topSellingProducts.length);
-
-    if (topSellingProducts.length === 0) {
-      console.log('No top selling products, fetching random active products...');
-      
-      const whereClause = {
         isActive: true,
         ...(categoryId && { categoryId }),
         ...(brandId && { brandId }),
-      };
-      console.log('Random products where clause:', JSON.stringify(whereClause, null, 2));
-      
-      // Get random active products
-      const randomProducts = await prisma.product.findMany({
-        where: whereClause,
-        take: 20,
-        include: {
-          category: true,
-          brand: true,
-          AdditionalPrice: {
-            include: {
-              shop: {
-                include: {
-                  branch: true,
-                },
-              },
-            },
-          },
-        },
-      });
-
-      console.log('Random products found:', randomProducts.length);
-      console.log('=== getTopSellingProducts END ===');
-
-      return {
-        products: randomProducts.map((product) => ({ product })),
-        count: randomProducts.length,
-        note: 'Random products (no top sellers found)',
-      };
-    }
-
-    // Get product IDs from top selling products
-    const productIds = topSellingProducts.map((item) => item.productId);
-    console.log('Product IDs from top sellers:', productIds);
-
-    // Build where clause for products
-    const whereClause = {
-      id: { in: productIds },
-      isActive: true,
-      ...(categoryId && { categoryId }),
-      ...(brandId && { brandId }),
-    };
-    console.log('Products where clause:', JSON.stringify(whereClause, null, 2));
-
-    const productsWithDetails = await prisma.product.findMany({
-      where: whereClause,
+      },
       include: {
         category: true,
         brand: true,
@@ -1275,13 +1236,111 @@ const getTopSellingProducts = async (
       },
     });
 
-    console.log('Products with details found:', productsWithDetails.length);
+    console.log(
+      `Found ${allEligibleProducts.length} total products matching filters`,
+    );
+
+    if (allEligibleProducts.length === 0) {
+      console.log('No products match the filters');
+      return {
+        products: [],
+        count: 0,
+        note: 'No products found with selected filters',
+      };
+    }
+
+    // Get product IDs that have sales (top sellers)
+    const productsWithSales = await prisma.sellItem.groupBy({
+      by: ['productId'],
+      where: {
+        productId: { in: allEligibleProducts.map((p) => p.id) },
+        OR: [
+          { itemSaleStatus: 'DELIVERED' },
+          {
+            sell: {
+              saleStatus: {
+                in: ['DELIVERED', 'APPROVED', 'PARTIALLY_DELIVERED'],
+              },
+            },
+          },
+        ],
+      },
+      _sum: { quantity: true },
+      orderBy: { _sum: { quantity: 'desc' } },
+    });
+
+    const productIdsWithSales = productsWithSales.map((item) => item.productId);
+    console.log(`Products with sales data: ${productIdsWithSales.length}`);
+
+    // Separate products into those with sales and those without
+    const productsWithSalesData = allEligibleProducts.filter((p) =>
+      productIdsWithSales.includes(p.id),
+    );
+    const productsWithoutSales = allEligibleProducts.filter(
+      (p) => !productIdsWithSales.includes(p.id),
+    );
+
+    console.log(
+      `Products with sales: ${productsWithSalesData.length}, without sales: ${productsWithoutSales.length}`,
+    );
+
+    // Sort products with sales by their sales quantity
+    productsWithSalesData.sort((a, b) => {
+      const salesA =
+        productsWithSales.find((item) => item.productId === a.id)?._sum
+          .quantity || 0;
+      const salesB =
+        productsWithSales.find((item) => item.productId === b.id)?._sum
+          .quantity || 0;
+      return salesB - salesA;
+    });
+
+    // Combine: First show top sellers, then fill with random products up to 20
+    const MAX_PRODUCTS = 20;
+    let finalProducts = [...productsWithSalesData];
+
+    if (
+      finalProducts.length < MAX_PRODUCTS &&
+      productsWithoutSales.length > 0
+    ) {
+      // Shuffle products without sales to get random order
+      const shuffledWithoutSales = [...productsWithoutSales];
+      for (let i = shuffledWithoutSales.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffledWithoutSales[i], shuffledWithoutSales[j]] = [
+          shuffledWithoutSales[j],
+          shuffledWithoutSales[i],
+        ];
+      }
+
+      const needed = MAX_PRODUCTS - finalProducts.length;
+      finalProducts.push(...shuffledWithoutSales.slice(0, needed));
+      console.log(
+        `Added ${Math.min(
+          needed,
+          shuffledWithoutSales.length,
+        )} random products to reach ${MAX_PRODUCTS} total`,
+      );
+    }
+
+    console.log(
+      `Returning ${finalProducts.length} products (${
+        productsWithSalesData.length
+      } top sellers + ${
+        finalProducts.length - productsWithSalesData.length
+      } random)`,
+    );
     console.log('=== getTopSellingProducts END ===');
 
     return {
-      products: productsWithDetails.map((product) => ({ product })),
-      count: productsWithDetails.length,
-      note: 'Top selling products',
+      products: finalProducts.map((product) => ({ product })),
+      count: finalProducts.length,
+      note:
+        productsWithSalesData.length > 0
+          ? `${productsWithSalesData.length} top selling products + ${
+              finalProducts.length - productsWithSalesData.length
+            } other products`
+          : 'Random products from selected filters',
     };
   } catch (error) {
     console.error('=== getTopSellingProducts ERROR ===');

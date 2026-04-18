@@ -12,7 +12,11 @@ router.get(
   // auth,
   GeneralDashboardController.getAllTotalsWithItems,
 );
-
+router.get(
+  '/api/dashboard/top-products-report',
+  // auth,
+  GeneralDashboardController.getTopProductsReportWithPrediction,
+);
 router.get(
   '/api/dashboard/sell-status-chart',
   // auth,
