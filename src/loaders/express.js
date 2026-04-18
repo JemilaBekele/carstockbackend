@@ -45,11 +45,13 @@ const {
   cors: corsConfig,
   trustProxy,
 } = require('../config/config');
+const requestLogger = require('../middlewares/requestLogger');
 
 module.exports = async (app) => {
   app.set('trust proxy', trustProxy);
   app.use(morgan.successHandler);
   app.use(morgan.errorHandler);
+  app.use(requestLogger); // Add request logging middleware
   // jwt authentication
   app.use(passport.initialize());
   passport.use('jwt', jwtStrategy);
