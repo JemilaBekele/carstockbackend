@@ -159,6 +159,32 @@ const getUserById = async (id) => {
   return user;
 };
 
+const getUserByIdWithPermissions = async (id) => {
+  const user = await prisma.user.findUnique({
+    where: { id },
+    include: {
+      role: {
+        include: {
+          permissions: {
+            include: {
+              permission: true,
+            },
+          },
+        },
+      },
+      branch: true,
+      shops: true,
+      stores: true,
+    },
+  });
+
+  if (!user) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
+  }
+
+  return user;
+};
+
 const getUserByEmail = async (email) => {
   const user = await prisma.user.findUnique({
     where: { email },
@@ -334,6 +360,7 @@ module.exports = {
   createUser,
   getUsers,
   getUserById,
+  getUserByIdWithPermissions,
   getUserByEmail,
   updateUserById,
   deleteUserById,

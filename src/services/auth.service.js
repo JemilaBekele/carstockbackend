@@ -268,11 +268,15 @@ const refreshAuthToken = async (refreshToken) => {
     // 2. Get the user from the payload
     const user = await userService.getUserById(refreshTokenPayload.sub); // payload.sub is the userId
     if (!user) {
-      // This case indicates a refresh token for a non-existent user
-      throw new Error('User not found for refresh token'); // More descriptive error
+      throw new Error('User not found for refresh token');
     }
 
-    // 3. Generate a new pair of tokens
+    // 3. Reject refresh for inactive/suspended users
+    if (user.status !== 'Active') {
+      throw new Error('User account is not active');
+    }
+
+    // 4. Generate a new pair of tokens
     // The old refresh token remains valid until its expiry.
     const newTokens = await tokenService.generateAuthTokens(user.id);
 

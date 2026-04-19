@@ -30,11 +30,31 @@ const getUser = catchAsync(async (req, res) => {
 });
 
 const getUsermy = catchAsync(async (req, res) => {
-  const user = await userService.getUserById(req.user.id);
+  const user = await userService.getUserByIdWithPermissions(req.user.id);
   if (!user) {
     throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
   }
-  res.status(httpStatus.OK).send({ user });
+
+  const permissions = Array.isArray(user.role?.permissions)
+    ? user.role.permissions.map(
+        (rolePermission) => rolePermission.permission.name,
+      )
+    : [];
+
+  const sanitizedRole = user.role
+    ? {
+        ...user.role,
+        permissions: undefined,
+      }
+    : null;
+
+  res.status(httpStatus.OK).send({
+    user: {
+      ...user,
+      role: sanitizedRole,
+      permissions,
+    },
+  });
 });
 
 const updateUser = catchAsync(async (req, res) => {

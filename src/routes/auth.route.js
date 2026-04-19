@@ -1,8 +1,8 @@
 const express = require('express');
 
 const router = express.Router();
-// const validate = require('../middlewares/validate');
-// const { userValidation } = require('../validations');
+const validate = require('../middlewares/validate');
+const { authValidation } = require('../validations');
 const { authController } = require('../controllers');
 const auth = require('../middlewares/auth');
 // const checkPermission = require('../middlewares/permission.middleware');
@@ -86,7 +86,11 @@ router.post(
   // validate(userValidation.loginSchema),  Storelogin, Saleslogin,
   authController.Storelogin,
 );
-router.post('/api/auth/refresh-tokens', authController.refreshTokens);
+router.post(
+  '/api/auth/refresh-tokens',
+  validate(authValidation.refreshTokenSchema),
+  authController.refreshTokens,
+);
 router.put(
   '/api/user/reset-password/:userId',
   auth,
