@@ -69,7 +69,7 @@ const login = async (email, password, ipAddr) => {
     }
     // Wait for all rate limiter promises to resolve before throwing error
     await Promise.all(promises);
-    throw new ApiError(httpStatus.UNAUTHORIZED, 'Incorrect email or password');
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Incorrect email or password');
   }
 
   // Check if user is active
@@ -139,7 +139,7 @@ const Storelogin = async (email, password, ipAddr) => {
       );
     }
     await Promise.all(promises);
-    throw new ApiError(httpStatus.UNAUTHORIZED, 'Incorrect email or password');
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Incorrect email or password');
   }
   // NEW: Only allow admin or roles containing "store" (case-insensitive)
   const roleName = user.role?.name?.toLowerCase() || '';
@@ -210,7 +210,7 @@ const Saleslogin = async (email, password, ipAddr) => {
       );
     }
     await Promise.all(promises);
-    throw new ApiError(httpStatus.UNAUTHORIZED, 'Incorrect email or password');
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Incorrect email or password');
   }
   // NEW: Only allow admin or roles containing "store" (case-insensitive)
   const roleName = user.role?.name?.toLowerCase() || '';
@@ -285,7 +285,7 @@ const refreshAuthToken = async (refreshToken) => {
     return newTokens;
   } catch (error) {
     // Catch any errors from jwt.verify, user lookup, or token generation
-    throw new ApiError(httpStatus.UNAUTHORIZED, 'Please authenticate'); // Send a generic error to the client
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid or expired refresh token');
   }
 };
 
