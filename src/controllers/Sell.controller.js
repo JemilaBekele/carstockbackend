@@ -188,7 +188,6 @@ const deliverAllSaleItems = catchAsync(async (req, res) => {
   const userId = req.user.id;
   const { id } = req.params; // saleId
   const { deliveryData } = req.body; // batch delivery data
-
   if (
     !deliveryData ||
     !deliveryData.items ||
@@ -345,21 +344,19 @@ const cancelSale = catchAsync(async (req, res) => {
 });
 
 const addSellFiles = catchAsync(async (req, res) => {
-
   // Log body fields
 
   // Structure files by field name with detailed logging
   const structuredFiles = {};
-
 
   if (req.files) {
     console.log('   - Files found');
     for (const [fieldname, files] of Object.entries(req.files)) {
       console.log(`   - Field: "${fieldname}"`);
       console.log(`     Count: ${files.length}`);
-      
+
       structuredFiles[fieldname] = files;
-      
+
       files.forEach((file, index) => {
         console.log(`     [${index}] File details:`, {
           fieldname: file.fieldname,
@@ -452,6 +449,40 @@ const addSellFiles = catchAsync(async (req, res) => {
 
   console.log('=== ADD SELL FILES CONTROLLER END ===');
 });
+const addSellPayment = catchAsync(async (req, res) => {
+  const userId = req.user?.id;
+  const { sellId } = req.params;
+
+  // Validate sellId
+  if (!sellId) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Sell ID is required');
+  }
+
+  // Call service
+  const result = await sellService.addSellPayment(sellId, req.body, userId);
+
+  // Response
+  res.status(httpStatus.CREATED).send({
+    success: true,
+    message: 'Payment added successfully',
+    data: result,
+  });
+});
+const getSellPaymentHistory = catchAsync(async (req, res) => {
+  const { sellId } = req.params;
+
+  if (!sellId) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Sell ID is required');
+  }
+
+  const result = await sellService.getSellPaymentHistory(sellId);
+
+  res.status(httpStatus.OK).send({
+    success: true,
+    message: 'Payment history fetched successfully',
+    data: result,
+  });
+});
 module.exports = {
   createSell,
   getSell,
@@ -471,4 +502,6 @@ module.exports = {
   getSellByIdByuser,
   unlockSell,
   addSellFiles,
+  addSellPayment,
+  getSellPaymentHistory,
 };

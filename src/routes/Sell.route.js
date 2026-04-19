@@ -120,7 +120,6 @@ router.put(
   '/api/sell/:id/upload/file',
   auth,
   (req, res, next) => {
-
     // Log raw chunks as they come in
     const oldWrite = res.write;
     const oldEnd = res.end;
@@ -148,5 +147,12 @@ router.put(
   },
   debugUploadSellFiles,
   sellController.addSellFiles,
+);
+router.post('/api/sells/:sellId/payments', auth, sellController.addSellPayment);
+
+router.get(
+  '/api/sells/:sellId/payments',
+  auth,
+  sellController.getSellPaymentHistory,
 );
 module.exports = router;

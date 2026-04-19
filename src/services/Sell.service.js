@@ -1,6 +1,5 @@
 const httpStatus = require('http-status');
 const { subMonths } = require('date-fns');
-const path = require('path');
 const { getIO } = require('../socket/s');
 const ApiError = require('../utils/ApiError');
 const prisma = require('./prisma');
@@ -266,27 +265,20 @@ const generateInvoiceNumber = async () => {
     return `INV-${Date.now().toString().slice(-8)}`;
   }
 };
-// Create Sell
-// Create Sell
-// Create Sell
-const createSell = async (sellBody, userId) => {
-  console.log('=== createSell START ===');
-  console.log('Sell Body:', JSON.stringify(sellBody, null, 2));
 
+const createSell = async (sellBody, userId) => {
   const user = await prisma.user.findUnique({
     where: { id: userId },
     include: { branch: true },
   });
 
   if (!user) {
-    console.error('User not found:', userId);
     throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
   }
 
   const { items: itemsString, ...restSellBody } = sellBody;
   const items =
     typeof itemsString === 'string' ? JSON.parse(itemsString) : itemsString;
-  console.log('Items:', JSON.stringify(items, null, 2));
 
   if (!items || !Array.isArray(items) || items.length === 0) {
     throw new ApiError(
@@ -328,7 +320,6 @@ const createSell = async (sellBody, userId) => {
       },
     },
   });
-  console.log('Products found:', products.length);
 
   // Fetch available shop stocks for validation - updated to use direct product relation
   const shopStocks = await prisma.shopStock.findMany({
@@ -343,9 +334,7 @@ const createSell = async (sellBody, userId) => {
       shop: true,
     },
   });
-  console.log('Shop stocks found:', shopStocks.length);
 
-  let allItemsApproved = true;
   const enhancedItems = items.map((item, index) => {
     if (!item.productId) {
       throw new ApiError(
@@ -370,54 +359,7 @@ const createSell = async (sellBody, userId) => {
     }
 
     // Calculate piece quantity based on isBox flag
-    let pieceQuantity = item.quantity;
     const isBox = item.isBox || false;
-
-    if (isBox) {
-      if (!product.hasBox || !product.boxSize || product.boxSize <= 0) {
-        throw new ApiError(
-          httpStatus.BAD_REQUEST,
-          `Product "${product.name}" does not support box/packaging or has invalid box size.`,
-        );
-      }
-      pieceQuantity = item.quantity * product.boxSize;
-      console.log(
-        `Item ${index + 1}: Converting ${
-          item.quantity
-        } box(es) to ${pieceQuantity} pieces (${product.boxSize} pieces/box)`,
-      );
-    }
-
-    // Check available stock for this product in the selected shop
-    const availableStock = shopStocks
-      .filter(
-        (stock) =>
-          stock.productId === item.productId && stock.shopId === item.shopId,
-      )
-      .reduce((sum, stock) => sum + stock.quantity, 0);
-    console.log(
-      `Item ${
-        index + 1
-      }: Available stock: ${availableStock}, Requested: ${pieceQuantity}`,
-    );
-
-    if (pieceQuantity <= 0) {
-      throw new ApiError(
-        httpStatus.BAD_REQUEST,
-        `Item ${index + 1} has invalid quantity`,
-      );
-    }
-
-    if (pieceQuantity > availableStock) {
-      throw new ApiError(
-        httpStatus.BAD_REQUEST,
-        `Item ${index + 1} quantity (${
-          isBox
-            ? `${item.quantity} box(es) = ${pieceQuantity} pieces`
-            : `${pieceQuantity} pieces`
-        }) exceeds available stock (${availableStock} pieces) in shop`,
-      );
-    }
 
     // Ensure unitPrice is converted to a number
     const unitPrice = Number(item.unitPrice);
@@ -432,20 +374,14 @@ const createSell = async (sellBody, userId) => {
       );
     }
 
-    // Get additional prices for THIS specific shop
-    const shopAdditionalPrices = product.AdditionalPrice.filter(
-      (ap) => ap.shopId === null || ap.shopId === item.shopId,
-    );
-
-    // Check if unit price matches any additional price for this shop
-    const isAdditionalPrice = shopAdditionalPrices.some(
-      (ap) => ap.price === unitPrice,
-    );
-
-    const isPriceValid = isAdditionalPrice;
-
-    if (!isPriceValid) {
-      allItemsApproved = false;
+    // Calculate total price - convert only if isBox is true
+    let totalPrice;
+    if (isBox) {
+      // If it's a box, convert the total price (price * quantity * boxSize)
+      totalPrice = unitPrice * item.quantity * product.boxSize;
+    } else {
+      // If it's not a box, keep the original calculation (price * quantity)
+      totalPrice = unitPrice * item.quantity;
     }
 
     return {
@@ -453,26 +389,28 @@ const createSell = async (sellBody, userId) => {
       productId: item.productId,
       shopId: item.shopId,
       isBox,
-      quantity: pieceQuantity, // Store as pieces in the database
-      unitPrice,
-      isPriceValid,
-      availableStock,
+      quantity: item.quantity, // Store as pieces in the database
+      unitPrice, // Unit price remains unchanged
       boxSize: product.boxSize,
+      totalPrice,
     };
   });
 
-  const subTotal = enhancedItems.reduce(
-    (sum, item) => sum + item.unitPrice * item.quantity,
-    0,
-  );
+  // Calculate subtotal - convert only for box items
+  const subTotal = enhancedItems.reduce((sum, item) => {
+    if (item.isBox) {
+      // For box items, use the converted total price
+      return sum + item.unitPrice * item.quantity * item.boxSize;
+    }
+    // For non-box items, use regular calculation
+    return sum + item.unitPrice * item.quantity;
+  }, 0);
+
   const discount = restSellBody.discount || 0;
   const vat = restSellBody.vat || 0;
   const grandTotal = subTotal - discount + vat;
 
   // Determine sale status based on price validation
-  const saleStatus =
-    allItemsApproved && !hasDiscount ? 'APPROVED' : 'NOT_APPROVED';
-  console.log('Sale Status:', saleStatus);
 
   // Create the sell record without stock updates
   const sell = await prisma.sell.create({
@@ -483,9 +421,10 @@ const createSell = async (sellBody, userId) => {
       subTotal,
       discount,
       vat,
+      balance: grandTotal,
       grandTotal,
       NetTotal: grandTotal,
-      saleStatus,
+      saleStatus: 'NOT_APPROVED',
       saleDate: restSellBody.saleDate
         ? new Date(restSellBody.saleDate)
         : new Date(),
@@ -498,9 +437,10 @@ const createSell = async (sellBody, userId) => {
           productId: item.productId,
           shopId: item.shopId,
           isBox: item.isBox,
+          remainingQuantity: item.quantity,
           quantity: item.quantity, // Already in pieces
-          unitPrice: item.unitPrice,
-          totalPrice: item.unitPrice * item.quantity,
+          unitPrice: item.unitPrice, // Unit price remains unchanged
+          totalPrice: item.totalPrice, // Using the converted total price
           itemSaleStatus: 'PENDING',
         })),
       },
@@ -522,85 +462,9 @@ const createSell = async (sellBody, userId) => {
     },
   });
 
-  console.log('Sale created successfully:', sell.id);
-
-  if (saleStatus === 'APPROVED') {
-    try {
-      const uniqueShopIds = sell.items
-        .map((item) => item.shopId)
-        .filter(Boolean)
-        .filter((shopId, index, array) => array.indexOf(shopId) === index);
-
-      const usersWithShopAccess = await prisma.user.findMany({
-        where: {
-          shops: {
-            some: {
-              id: { in: uniqueShopIds },
-            },
-          },
-          status: 'Active',
-        },
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          shops: {
-            where: {
-              id: { in: uniqueShopIds },
-            },
-            select: {
-              id: true,
-              name: true,
-            },
-          },
-        },
-      });
-
-      await Promise.allSettled(
-        uniqueShopIds.map((shopId) =>
-          prisma.notification.create({
-            data: {
-              shopId,
-              title: 'Sale Approved - Prepare for Delivery',
-              message: `Sale #${sell.invoiceNo} has been approved and is ready for delivery preparation`,
-              type: 'SELL_READY_FOR_DELIVERY',
-              relatedEntityType: 'SELL',
-            },
-          }),
-        ),
-      );
-
-      const io = getIO();
-      const realTimeNotification = {
-        title: 'New Sale Approved',
-        message: `Sale #${sell.invoiceNo} has been approved and needs delivery preparation`,
-        type: 'SELL_READY_FOR_DELIVERY',
-        relatedEntityType: 'SELL',
-        saleId: sell.id,
-        invoiceNo: sell.invoiceNo,
-        timestamp: new Date().toISOString(),
-      };
-
-      usersWithShopAccess.forEach((user) => {
-        io.to(user.id).emit('new-notification', realTimeNotification);
-        user.shops.forEach((shop) => {
-          io.to(`${user.id}:${shop.id}`).emit(
-            'new-notification',
-            realTimeNotification,
-          );
-        });
-      });
-
-      console.log(`📢 Notifications sent for approved sale #${sell.invoiceNo}`);
-    } catch (notificationError) {
-      console.error('❌ Error in notification process:', notificationError);
-    }
-  }
-
   console.log('=== createSell END ===');
   return sell;
 };
-
 // Update Sell
 const updateSell = async (sellId, sellBody, userId) => {
   console.log('=== updateSell START ===');
@@ -808,29 +672,48 @@ const updateSell = async (sellId, sellBody, userId) => {
       allItemsApproved = false;
     }
 
+    // Calculate total price - convert only if isBox is true
+    let totalPrice;
+    if (isBox) {
+      // If it's a box, convert the total price (price * quantity * boxSize)
+      totalPrice = unitPrice * item.quantity * product.boxSize;
+    } else {
+      // If it's not a box, keep the original calculation (price * quantity)
+      totalPrice = unitPrice * item.quantity;
+    }
+
     return {
       ...item,
       productId: item.productId,
       shopId: item.shopId,
       isBox,
-      quantity: pieceQuantity,
+      quantity: item.quantity,
+      originalQuantity: item.quantity, // Keep original quantity for reference
       unitPrice,
+      totalPrice,
       isPriceValid: isAdditionalPrice,
       availableStock: adjustedAvailableStock,
       boxSize: product.boxSize,
     };
   });
 
-  const subTotal = enhancedItems.reduce(
-    (sum, item) => sum + item.unitPrice * item.quantity,
-    0,
-  );
+  // Calculate subtotal - convert only for box items
+  const subTotal = enhancedItems.reduce((sum, item) => {
+    if (item.isBox) {
+      // For box items, use the converted total price
+      return sum + item.unitPrice * item.originalQuantity * item.boxSize;
+    }
+    // For non-box items, use regular calculation
+    return sum + item.unitPrice * item.quantity;
+  }, 0);
+
   const discount = newDiscount;
   const vat = restSellBody.vat || existingSell.vat || 0;
   const grandTotal = subTotal - discount + vat;
 
   let saleStatus;
 
+  // Any update will set status to NOT_APPROVED unless all conditions are met
   if (discountChangedFromZeroToNonZero) {
     saleStatus = 'NOT_APPROVED';
   } else if (discountChangedFromNonZeroToZero) {
@@ -838,7 +721,37 @@ const updateSell = async (sellId, sellBody, userId) => {
   } else if (hasDiscount) {
     saleStatus = 'NOT_APPROVED';
   } else {
-    saleStatus = allItemsApproved ? 'APPROVED' : 'NOT_APPROVED';
+    // If there's any update (items changed, prices changed, etc.), set to NOT_APPROVED
+    // Compare if items have changed from existing sell
+    const itemsChanged =
+      JSON.stringify(
+        enhancedItems.map((item) => ({
+          productId: item.productId,
+          shopId: item.shopId,
+          isBox: item.isBox,
+                    remainingQuantity: item.quantity,
+
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+        })),
+      ) !==
+      JSON.stringify(
+        existingSell.items.map((item) => ({
+          productId: item.productId,
+          shopId: item.shopId,
+          isBox: item.isBox,
+                    remainingQuantity: item.quantity,
+
+          quantity: item.quantity,
+          unitPrice: item.unitPrice,
+        })),
+      );
+
+    if (itemsChanged) {
+      saleStatus = 'NOT_APPROVED';
+    } else {
+      saleStatus = allItemsApproved ? 'APPROVED' : 'NOT_APPROVED';
+    }
   }
 
   const result = await prisma.$transaction(async (tx) => {
@@ -867,9 +780,11 @@ const updateSell = async (sellId, sellBody, userId) => {
             productId: item.productId,
             shopId: item.shopId,
             isBox: item.isBox,
-            quantity: item.quantity,
-            unitPrice: item.unitPrice,
-            totalPrice: item.unitPrice * item.quantity,
+                      remainingQuantity: item.quantity,
+
+            quantity: item.quantity, // Store as pieces in the database
+            unitPrice: item.unitPrice, // Unit price remains unchanged
+            totalPrice: item.totalPrice, // Using the converted total price
             itemSaleStatus: 'PENDING',
           })),
         },
@@ -959,7 +874,6 @@ const updateSell = async (sellId, sellBody, userId) => {
     }
   }
 
-  console.log('=== updateSell END ===');
   return result;
 };
 // Delete Sell
@@ -1094,14 +1008,10 @@ const deleteSell = async (id, userId) => {
 };
 
 const completeSaleDelivery = async (saleId, deliveryData, userId) => {
-  console.log('=== completeSaleDelivery START ===');
-  console.log('Sale ID:', saleId);
-  console.log('Delivery Data:', JSON.stringify(deliveryData, null, 2));
 
   const sell = await getSellById(saleId);
 
   if (!sell) {
-    console.error('Sale not found:', saleId);
     throw new ApiError(httpStatus.NOT_FOUND, 'Sale not found');
   }
 
@@ -1135,8 +1045,10 @@ const completeSaleDelivery = async (saleId, deliveryData, userId) => {
       );
     }
 
-    // Validate all items first
-    deliveryData.items.forEach((deliveryItem) => {
+    // Process each delivery item
+    const processedItems = [];
+    
+    for (const deliveryItem of deliveryData.items) {
       const sellItem = sellItemsToDeliver.find(
         (item) => item.id === deliveryItem.itemId,
       );
@@ -1148,166 +1060,198 @@ const completeSaleDelivery = async (saleId, deliveryData, userId) => {
         );
       }
 
-      // Validate item status transition
-      const allowedItemTransitions = {
-        PENDING: ['DELIVERED', 'CANCELLED'],
-        DELIVERED: ['RETURNED'],
-        CANCELLED: [],
-        RETURNED: [],
-      };
+      // Get the given quantity (use provided value or deliver remaining)
+      const givenQty = deliveryItem.givenQuantity || 
+        (sellItem.remainingQuantity > 0 ? sellItem.remainingQuantity : sellItem.quantity);
+      
+      // Calculate new remaining quantity (simple subtraction)
+      const currentRemaining = sellItem.remainingQuantity !== null && 
+        sellItem.remainingQuantity !== undefined
+          ? sellItem.remainingQuantity
+          : sellItem.quantity;
+      
+      const newRemainingQuantity = currentRemaining - givenQty;
+      
+      // Calculate total given quantity so far
+      const totalGivenSoFar = (sellItem.givenQuantity || 0) + givenQty;
 
-      if (
-        !allowedItemTransitions[sellItem.itemSaleStatus]?.includes('DELIVERED')
-      ) {
-        throw new ApiError(
-          httpStatus.BAD_REQUEST,
-          `Cannot deliver item ${sellItem.id} from current status: ${sellItem.itemSaleStatus}. Item must be in PENDING status to be delivered.`,
-        );
+      // Determine new item status
+      let newItemStatus = sellItem.itemSaleStatus;
+      if (newRemainingQuantity <= 0) {
+        newItemStatus = 'DELIVERED';
+      } else if (totalGivenSoFar > 0 && newRemainingQuantity > 0) {
+        newItemStatus = 'PARTIALLY_DELIVERED';
       }
-    });
-
-    // Prepare operations
-    const operations = [];
-
-    for (const deliveryItem of deliveryData.items) {
-      const sellItem = sellItemsToDeliver.find(
-        (item) => item.id === deliveryItem.itemId,
-      );
 
       console.log(`Processing item ${sellItem.id}:`, {
         productId: sellItem.productId,
-        shopId: sellItem.shopId,
-        quantity: sellItem.quantity,
+        productName: sellItem.product.name,
         isBox: sellItem.isBox,
-        productHasBox: sellItem.product.hasBox,
-        productBoxSize: sellItem.product.boxSize,
+        boxSize: sellItem.product.boxSize,
+        totalQuantity: sellItem.quantity,
+        previousGiven: sellItem.givenQuantity || 0,
+        currentGiven: givenQty,
+        totalGiven: totalGivenSoFar,
+        previousRemaining: currentRemaining,
+        newRemaining: newRemainingQuantity,
+        newStatus: newItemStatus,
       });
 
-      // Calculate piece quantity based on isBox flag
-      let pieceQuantity = sellItem.quantity;
-
-      if (sellItem.isBox) {
-        // If isBox is true, convert boxes to pieces using product's boxSize
-        if (!sellItem.product.hasBox) {
-          throw new ApiError(
-            httpStatus.BAD_REQUEST,
-            `Product "${sellItem.product.name}" does not support box/packaging. Please enable box support for this product.`,
-          );
-        }
-
-        if (!sellItem.product.boxSize || sellItem.product.boxSize <= 0) {
-          throw new ApiError(
-            httpStatus.BAD_REQUEST,
-            `Product "${sellItem.product.name}" has invalid box size (${sellItem.product.boxSize}). Please configure box size correctly.`,
-          );
-        }
-
-        pieceQuantity = sellItem.quantity * sellItem.product.boxSize;
-
-        console.log(`📦 Product: ${sellItem.product.name}`);
-        console.log(`   Sale quantity: ${sellItem.quantity} box(es)`);
-        console.log(`   Box size: ${sellItem.product.boxSize} pieces/box`);
-        console.log(`   Total pieces to remove: ${pieceQuantity}`);
-        console.log(
-          `   Calculation: ${sellItem.quantity} × ${sellItem.product.boxSize} = ${pieceQuantity}`,
-        );
-      } else {
-        pieceQuantity = sellItem.quantity;
-        console.log(`📦 Product: ${sellItem.product.name}`);
-        console.log(`   Sale quantity: ${sellItem.quantity} piece(s)`);
-        console.log(`   Total pieces to remove: ${pieceQuantity}`);
-      }
-
-      // Validate piece quantity is positive
-      if (pieceQuantity <= 0) {
+      if (givenQty <= 0) {
         throw new ApiError(
           httpStatus.BAD_REQUEST,
           `Invalid quantity for product "${sellItem.product.name}". Quantity must be greater than 0.`,
         );
       }
 
-      // Check if enough stock is available in the shop
+      // Validate that given quantity doesn't exceed remaining quantity
+      if (givenQty > currentRemaining) {
+        throw new ApiError(
+          httpStatus.BAD_REQUEST,
+          `Given quantity (${givenQty}) cannot exceed remaining quantity (${currentRemaining}) for item ${sellItem.product.name}`,
+        );
+      }
+
+      // Validate item status transition
+      const allowedItemTransitions = {
+        PENDING: ['DELIVERED', 'CANCELLED', 'PARTIALLY_DELIVERED'],
+        PARTIALLY_DELIVERED: ['DELIVERED', 'CANCELLED'],
+        DELIVERED: ['RETURNED'],
+        CANCELLED: [],
+        RETURNED: [],
+      };
+
+      const currentStatus = sellItem.itemSaleStatus;
+      const allowedStatuses = allowedItemTransitions[currentStatus] || [];
+
+      if (!allowedStatuses.includes(newItemStatus)) {
+        throw new ApiError(
+          httpStatus.BAD_REQUEST,
+          `Cannot transition item from ${currentStatus} to ${newItemStatus}`,
+        );
+      }
+
+      processedItems.push({
+        sellItem,
+        givenQty,
+        totalGivenSoFar,
+        newRemainingQuantity,
+        newItemStatus,
+      });
+    }
+
+    // Calculate piece quantities for stock removal
+    const processedItemsWithPieces = processedItems.map((item) => {
+      let pieceQuantity = item.givenQty;
+      
+      // If it's a box, convert to pieces for stock removal
+      if (item.sellItem.isBox) {
+        if (!item.sellItem.product.hasBox || !item.sellItem.product.boxSize) {
+          throw new ApiError(
+            httpStatus.BAD_REQUEST,
+            `Product "${item.sellItem.product.name}" has invalid box configuration.`,
+          );
+        }
+        pieceQuantity = item.givenQty * item.sellItem.product.boxSize;
+        console.log(`📦 Converting ${item.givenQty} boxes to ${pieceQuantity} pieces for stock removal`);
+      }
+      
+      return {
+        ...item,
+        pieceQuantity,
+      };
+    });
+
+    // Validate stock availability for all items
+    const stockValidationPromises = processedItemsWithPieces.map(async (item) => {
       const shopStock = await tx.shopStock.findUnique({
         where: {
           shopId_productId: {
-            shopId: sellItem.shopId,
-            productId: sellItem.productId,
+            shopId: item.sellItem.shopId,
+            productId: item.sellItem.productId,
           },
         },
       });
 
-      console.log('Shop stock lookup result:', shopStock);
-
       if (!shopStock) {
         throw new ApiError(
           httpStatus.BAD_REQUEST,
-          `Product "${sellItem.product.name}" not found in shop stock for delivery.`,
+          `Product "${item.sellItem.product.name}" not found in shop stock for delivery.`,
         );
       }
 
       console.log(`Current shop stock: ${shopStock.quantity} pieces`);
-      console.log(`Requested to remove: ${pieceQuantity} pieces`);
+      console.log(`Requested to remove: ${item.pieceQuantity} pieces`);
 
-      if (shopStock.quantity < pieceQuantity) {
+      if (shopStock.quantity < item.pieceQuantity) {
         throw new ApiError(
           httpStatus.BAD_REQUEST,
-          `Insufficient stock for product "${sellItem.product.name}" in shop. Available: ${shopStock.quantity} pieces, Requested: ${pieceQuantity} pieces`,
+          `Insufficient stock for product "${item.sellItem.product.name}" in shop. Available: ${shopStock.quantity} pieces, Requested: ${item.pieceQuantity} pieces`,
         );
       }
 
-      const newShopQuantity = shopStock.quantity - pieceQuantity;
-      console.log(`Shop stock after removal: ${newShopQuantity} pieces`);
+      return item;
+    });
 
-      // Remove stock from shop
-      operations.push(
-        tx.shopStock.update({
-          where: {
-            shopId_productId: {
-              shopId: sellItem.shopId,
-              productId: sellItem.productId,
-            },
+    const validatedItems = await Promise.all(stockValidationPromises);
+
+    // Create stock operations
+    const stockOperations = validatedItems.flatMap((item) => [
+      tx.shopStock.update({
+        where: {
+          shopId_productId: {
+            shopId: item.sellItem.shopId,
+            productId: item.sellItem.productId,
           },
-          data: {
-            quantity: { decrement: pieceQuantity },
-          },
-        }),
-      );
+        },
+        data: {
+          quantity: { decrement: item.pieceQuantity },
+        },
+      }),
+      tx.stockLedger.create({
+        data: {
+          productId: item.sellItem.productId,
+          shopId: item.sellItem.shopId,
+          movementType: 'OUT',
+          pieceQuantity: item.pieceQuantity,
+          boxQuantity: item.sellItem.isBox ? item.givenQty : 0,
+          reference: `Sell-${sell.invoiceNo}`,
+          userId,
+          notes: item.sellItem.isBox
+            ? `Sale delivery - ${sell.invoiceNo} (${item.givenQty} box(es) = ${item.pieceQuantity} pieces)`
+            : `Sale delivery - ${sell.invoiceNo} (${item.givenQty} piece(s))`,
+          movementDate: new Date(),
+        },
+      }),
+    ]);
 
-      // Create stock ledger entry
-      operations.push(
-        tx.stockLedger.create({
-          data: {
-            productId: sellItem.productId,
-            shopId: sellItem.shopId,
-            movementType: 'OUT',
-            pieceQuantity,
-            boxQuantity: sellItem.isBox ? sellItem.quantity : 0,
-            reference: `Sell-${sell.invoiceNo}`,
-            userId,
-            notes: sellItem.isBox
-              ? `Sale delivery - ${sell.invoiceNo} (${sellItem.quantity} box(es) × ${sellItem.product.boxSize} = ${pieceQuantity} pieces)`
-              : `Sale delivery - ${sell.invoiceNo} (${sellItem.quantity} piece(s))`,
-            movementDate: new Date(),
-          },
-        }),
-      );
+    // Update sell items (store quantities as-is, no conversion)
+    const itemUpdatePromises = validatedItems.map((item) =>
+      tx.sellItem.update({
+        where: { id: item.sellItem.id },
+        data: {
+          givenQuantity: item.totalGivenSoFar,
+          remainingQuantity: item.newRemainingQuantity,
+          itemSaleStatus: item.newItemStatus,
+        },
+      })
+    );
 
-      // Update item status to DELIVERED
-      operations.push(
-        tx.sellItem.update({
-          where: { id: deliveryItem.itemId },
-          data: { itemSaleStatus: 'DELIVERED' },
-        }),
-      );
+    // Execute all operations
+    console.log(`Executing ${stockOperations.length} stock operations...`);
+    await Promise.all([...stockOperations, ...itemUpdatePromises]);
 
-      console.log(`✅ Item ${sellItem.id} processed successfully`);
-    }
+    // Get updated items
+    const updatedItems = await Promise.all(itemUpdatePromises);
+    
+    updatedItems.forEach((item, index) => {
+      const processed = validatedItems[index];
+      console.log(`✅ Item ${processed.sellItem.id} processed successfully`);
+      console.log(`   Status: ${processed.newItemStatus}`);
+      console.log(`   Given: ${processed.totalGivenSoFar}, Remaining: ${processed.newRemainingQuantity}`);
+    });
 
-    // Execute all operations in parallel
-    console.log(`Executing ${operations.length} operations...`);
-    await Promise.all(operations);
-
-    // Recalculate overall sale status based on all item statuses
+    // Recalculate overall sale status
     const allSaleItems = await tx.sellItem.findMany({
       where: { sellId: saleId },
     });
@@ -1315,14 +1259,12 @@ const completeSaleDelivery = async (saleId, deliveryData, userId) => {
     const itemStatuses = allSaleItems.map((item) => item.itemSaleStatus);
     let newSaleStatus;
 
-    // Determine overall status based on individual item statuses
     if (itemStatuses.every((status) => status === 'DELIVERED')) {
       newSaleStatus = 'DELIVERED';
     } else if (itemStatuses.every((status) => status === 'CANCELLED')) {
       newSaleStatus = 'CANCELLED';
-    } else if (itemStatuses.every((status) => status === 'RETURNED')) {
-      newSaleStatus = 'RETURNED';
-    } else if (itemStatuses.some((status) => status === 'DELIVERED')) {
+    } else if (itemStatuses.some((status) => status === 'DELIVERED') || 
+               itemStatuses.some((status) => status === 'PARTIALLY_DELIVERED')) {
       newSaleStatus = 'PARTIALLY_DELIVERED';
     } else if (itemStatuses.every((status) => status === 'PENDING')) {
       newSaleStatus = 'NOT_APPROVED';
@@ -1352,25 +1294,18 @@ const completeSaleDelivery = async (saleId, deliveryData, userId) => {
     });
 
     // Calculate total pieces delivered
-    let totalPiecesDelivered = 0;
-    for (const deliveryItem of deliveryData.items) {
-      const sellItem = sellItemsToDeliver.find(
-        (item) => item.id === deliveryItem.itemId,
-      );
-      if (sellItem.isBox && sellItem.product.boxSize) {
-        totalPiecesDelivered += sellItem.quantity * sellItem.product.boxSize;
-      } else {
-        totalPiecesDelivered += sellItem.quantity;
-      }
-    }
+    const totalPiecesDelivered = validatedItems.reduce((total, item) => {
+      return total + item.pieceQuantity;
+    }, 0);
 
     console.log(`🎉 Sale ${sell.invoiceNo} delivery completed successfully!`);
     console.log(`   Total pieces delivered: ${totalPiecesDelivered}`);
+    console.log(`   Items updated: ${updatedItems.length}`);
 
     // Create log entry
     await tx.log.create({
       data: {
-        action: `Sale ${sell.invoiceNo} delivered: ${deliveryData.items.length} items, ${totalPiecesDelivered} pieces`,
+        action: `Sale ${sell.invoiceNo} delivered: ${validatedItems.length} items, ${totalPiecesDelivered} pieces`,
         userId,
       },
     });
@@ -1379,7 +1314,6 @@ const completeSaleDelivery = async (saleId, deliveryData, userId) => {
     return finalUpdatedSale;
   });
 };
-
 const deliverAllSaleItems = async (saleId, deliveryData, userId) => {
   console.log('=== deliverAllSaleItems START ===');
 
@@ -1389,26 +1323,119 @@ const deliverAllSaleItems = async (saleId, deliveryData, userId) => {
     throw new ApiError(httpStatus.NOT_FOUND, 'Sale not found');
   }
 
-  // Get all items that can be delivered (PENDING status)
-  const deliverableItems = sell.items.filter(
-    (item) => item.itemSaleStatus === 'PENDING',
-  );
+  // Log all items for debugging
+  console.log('All sale items:', sell.items.map(item => ({
+    id: item.id,
+    productName: item.product?.name,
+    status: item.itemSaleStatus,
+    quantity: item.quantity,
+    givenQuantity: item.givenQuantity || 0,
+    remainingQuantity: item.remainingQuantity,
+    isBox: item.isBox
+  })));
+
+  // Get all items that can be delivered - with proper remaining quantity calculation
+  const deliverableItems = sell.items.filter((item) => {
+    // Check if status allows delivery
+    const isEligibleStatus = item.itemSaleStatus === 'PENDING' || 
+                             item.itemSaleStatus === 'PARTIALLY_DELIVERED';
+    
+    if (!isEligibleStatus) return false;
+    
+    // Calculate actual remaining quantity
+    let actualRemaining = 0;
+    
+    // If remainingQuantity is set and > 0, use it
+    if (item.remainingQuantity !== null && 
+        item.remainingQuantity !== undefined && 
+        item.remainingQuantity > 0) {
+      actualRemaining = item.remainingQuantity;
+    } 
+    // If remainingQuantity is 0 but givenQuantity is less than quantity, it's incorrect
+    else if (item.remainingQuantity === 0 && (item.givenQuantity || 0) < item.quantity) {
+      // Calculate correct remaining quantity
+      actualRemaining = item.quantity - (item.givenQuantity || 0);
+      console.log(`⚠️ Item ${item.id} has remainingQuantity=0 but givenQuantity=${item.givenQuantity || 0} < quantity=${item.quantity}. Correcting to ${actualRemaining}`);
+    }
+    // If remainingQuantity is null/undefined, calculate from quantity and givenQuantity
+    else if (item.remainingQuantity === null || item.remainingQuantity === undefined) {
+      actualRemaining = item.quantity - (item.givenQuantity || 0);
+      console.log(`⚠️ Item ${item.id} has no remainingQuantity. Calculating as ${actualRemaining}`);
+    }
+    
+    return actualRemaining > 0;
+  });
 
   console.log('Deliverable items count:', deliverableItems.length);
+  console.log('Deliverable items details:', deliverableItems.map(item => {
+    const remaining = item.remainingQuantity !== null && item.remainingQuantity !== undefined && item.remainingQuantity > 0
+      ? item.remainingQuantity
+      : item.quantity - (item.givenQuantity || 0);
+    
+    return {
+      id: item.id,
+      productName: item.product?.name,
+      status: item.itemSaleStatus,
+      quantity: item.quantity,
+      givenQuantity: item.givenQuantity || 0,
+      remainingQuantity: item.remainingQuantity,
+      calculatedRemaining: remaining
+    };
+  }));
 
   if (deliverableItems.length === 0) {
+    // Check if there are any non-delivered items
+    const nonDeliveredItems = sell.items.filter(item => 
+      item.itemSaleStatus !== 'DELIVERED' && item.itemSaleStatus !== 'CANCELLED'
+    );
+    
+    if (nonDeliveredItems.length === 0) {
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        'No items available for delivery. All items are already delivered or cancelled.',
+      );
+    }
+    
+    // Calculate if items have quantity remaining
+    const itemsWithRemaining = nonDeliveredItems.filter(item => {
+      const remaining = item.quantity - (item.givenQuantity || 0);
+      return remaining > 0;
+    });
+    
+    if (itemsWithRemaining.length > 0) {
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        `Found ${itemsWithRemaining.length} item(s) with remaining quantity, but they have status ${itemsWithRemaining.map(i => i.itemSaleStatus).join(', ')}. Please check item statuses.`,
+      );
+    }
+    
     throw new ApiError(
       httpStatus.BAD_REQUEST,
-      'No deliverable items found in this sale. All items are either already delivered, cancelled, or returned.',
+      'No deliverable items found in this sale. All items have zero remaining quantity.',
     );
   }
 
   // If no deliveryData.items provided, create delivery data for all deliverable items
   if (!deliveryData.items || deliveryData.items.length === 0) {
-    deliveryData.items = deliverableItems.map((item) => ({
-      itemId: item.id,
-    }));
-    console.log('Auto-generated delivery items for all deliverable items');
+    deliveryData.items = deliverableItems.map((item) => {
+      // Calculate the correct remaining quantity
+      let remainingQty = item.remainingQuantity;
+      
+      // If remainingQuantity is 0 but givenQuantity is less than quantity, correct it
+      if (remainingQty === 0 && (item.givenQuantity || 0) < item.quantity) {
+        remainingQty = item.quantity - (item.givenQuantity || 0);
+      }
+      // If remainingQuantity is null/undefined, calculate it
+      else if (remainingQty === null || remainingQty === undefined) {
+        remainingQty = item.quantity - (item.givenQuantity || 0);
+      }
+      
+      return {
+        itemId: item.id,
+        givenQuantity: remainingQty, // Deliver the remaining quantity
+      };
+    });
+    console.log('Auto-generated delivery items:', deliveryData.items);
   }
 
   console.log('=== deliverAllSaleItems END ===');
@@ -3059,17 +3086,12 @@ const unlockSell = async (id) => {
 
   return sell;
 };
-// sell.service.js
-
 // Helper function to save file
 const addSellFiles = async (sellId, userId, structuredFiles = {}) => {
-
-
   // Validate userId
   if (!userId) {
     throw new ApiError(httpStatus.UNAUTHORIZED, 'User ID is required');
   }
-
 
   // Check if sell exists
   const existingSell = await prisma.sell.findUnique({
@@ -3085,7 +3107,6 @@ const addSellFiles = async (sellId, userId, structuredFiles = {}) => {
   if (!existingSell) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Sale not found');
   }
-
 
   try {
     let { imageUrl } = existingSell;
@@ -3129,10 +3150,8 @@ const addSellFiles = async (sellId, userId, structuredFiles = {}) => {
       documentUrl = fileUrl;
     }
 
-
     // Update sell record with both files
     const updatedSell = await prisma.$transaction(async (prismaTx) => {
-
       const sell = await prismaTx.sell.update({
         where: { id: sellId },
         data: {
@@ -3140,7 +3159,6 @@ const addSellFiles = async (sellId, userId, structuredFiles = {}) => {
           documentUrl,
         },
       });
-
 
       // Create log entry
       const addedFiles = [];
@@ -3163,7 +3181,6 @@ const addSellFiles = async (sellId, userId, structuredFiles = {}) => {
       return sell;
     });
 
-
     return {
       success: true,
       message: `${structuredFiles.image ? 'Image' : ''}${
@@ -3174,7 +3191,6 @@ const addSellFiles = async (sellId, userId, structuredFiles = {}) => {
       data: updatedSell,
     };
   } catch (error) {
-
     if (error.code) {
       console.error('Prisma error code:', error.code);
     }
@@ -3185,6 +3201,198 @@ const addSellFiles = async (sellId, userId, structuredFiles = {}) => {
     );
   }
 };
+const addSellPayment = async (sellId, paymentData, userId) => {
+  const { amount } = paymentData;
+
+  try {
+    // Validate amount
+    if (!amount || amount <= 0) {
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        'Payment amount must be greater than 0',
+      );
+    }
+
+    // Get the sell with current status
+    const sell = await prisma.sell.findUnique({
+      where: { id: sellId },
+      include: {
+        items: true,
+        sellPayments: {
+          // ✅ Changed from 'payments' to 'sellPayments'
+          orderBy: { createdAt: 'desc' },
+        },
+      },
+    });
+
+    if (!sell) {
+      throw new ApiError(httpStatus.NOT_FOUND, 'Sell not found');
+    }
+
+    // Check if sell is cancelled
+    if (sell.saleStatus === 'CANCELLED') {
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        'Cannot add payment to cancelled sale',
+      );
+    }
+
+    // Calculate current total paid
+    const currentTotalPaid = sell.sellPayments.reduce(
+      // ✅ Changed from 'payments' to 'sellPayments'
+      (sum, payment) => sum + payment.amount,
+      0,
+    );
+    const newTotalPaid = currentTotalPaid + amount;
+
+    // Check if payment exceeds grand total
+    if (newTotalPaid > sell.grandTotal) {
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        `Payment amount (${amount}) exceeds remaining balance (${
+          sell.grandTotal - currentTotalPaid
+        })`,
+      );
+    }
+
+    // Determine new payment status
+    let paymentStatus;
+    if (newTotalPaid >= sell.grandTotal) {
+      paymentStatus = 'PAID';
+    } else if (newTotalPaid > 0 && newTotalPaid < sell.grandTotal) {
+      paymentStatus = 'PARTIAL';
+    } else {
+      paymentStatus = 'PENDING';
+    }
+
+    // Calculate new balance (remaining amount to pay)
+    const newBalance = sell.grandTotal - newTotalPaid;
+    // Create payment and update sell in transaction
+    const result = await prisma.$transaction(async (tx) => {
+      // Create payment record
+      const payment = await tx.sellPayment.create({
+        data: {
+          sellId,
+          amount,
+          createdById: userId,
+        },
+        include: {
+          createdBy: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      });
+
+      // Update sell with new totals and status
+      const updatedSell = await tx.sell.update({
+        where: { id: sellId },
+        data: {
+          totalPaid: newTotalPaid,
+          balance: newBalance,
+          paymentStatus,
+        },
+        include: {
+          customer: true,
+          branch: true,
+          sellPayments: {
+            // ✅ Changed from 'payments' to 'sellPayments'
+            orderBy: { createdAt: 'desc' },
+            include: {
+              createdBy: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      console.log('Sell updated successfully');
+      return { payment, sell: updatedSell };
+    });
+
+    console.log('Transaction completed successfully:', {
+      paymentId: result.payment.id,
+      amount: result.payment.amount,
+      newTotalPaid: result.sell.totalPaid,
+      newBalance: result.sell.balance,
+      paymentStatus: result.sell.paymentStatus,
+    });
+
+    console.log('=== addSellPayment END ===');
+    return result;
+  } catch (error) {
+    console.error('=== addSellPayment ERROR ===');
+    console.error('Error type:', error.constructor.name);
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+
+    // Log Prisma-specific error details
+    if (error.code) {
+      console.error('Prisma error code:', error.code);
+      console.error('Prisma error meta:', error.meta);
+    }
+
+    // Log any response data if it's an API error
+    if (error.response) {
+      console.error('Error response:', error.response.data);
+    }
+
+    console.error('=== addSellPayment ERROR END ===');
+    throw error;
+  }
+};
+const getSellPaymentHistory = async (sellId) => {
+  const sell = await prisma.sell.findUnique({
+    where: { id: sellId },
+    include: {
+      sellPayments: {
+        // ✅ Changed from 'payments' to 'sellPayments'
+        orderBy: { createdAt: 'desc' },
+        include: {
+          createdBy: {
+            select: {
+              id: true,
+              name: true,
+              email: true,
+            },
+          },
+        },
+      },
+      customer: true,
+    },
+  });
+
+  if (!sell) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Sell not found');
+  }
+  return {
+    sell: {
+      id: sell.id,
+      invoiceNo: sell.invoiceNo,
+      grandTotal: sell.grandTotal,
+      totalPaid: sell.totalPaid,
+      balance: sell.balance,
+      paymentStatus: sell.paymentStatus,
+      customer: sell.customer,
+    },
+    payments: sell.sellPayments, // ✅ Changed from 'payments' to 'sellPayments'
+    summary: {
+      totalPayments: sell.sellPayments.length, // ✅ Changed from 'payments' to 'sellPayments'
+      totalAmountPaid: sell.totalPaid,
+      remainingBalance: sell.balance,
+      isFullyPaid: sell.paymentStatus === 'PAID',
+    },
+  };
+};
+
 module.exports = {
   unlockSell,
   getSellById,
@@ -3205,4 +3413,6 @@ module.exports = {
   getAllSellsForStoreweb,
   getSellByIdByuser,
   addSellFiles,
+  addSellPayment,
+  getSellPaymentHistory,
 };
