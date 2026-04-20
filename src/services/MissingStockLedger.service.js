@@ -3,10 +3,6 @@ const ApiError = require('../utils/ApiError');
 const prisma = require('./prisma');
 
 const createMissingStockLedgerForSale = async (saleId, userId) => {
-  console.log('=== Starting Missing Stock Ledger Creation ===');
-  console.log('Sale ID:', saleId);
-  console.log('User ID:', userId);
-  console.log('Timestamp:', new Date().toISOString());
 
   try {
     const sell = await prisma.sell.findUnique({
@@ -54,12 +50,7 @@ const createMissingStockLedgerForSale = async (saleId, userId) => {
       throw new ApiError(httpStatus.NOT_FOUND, 'Sale not found');
     }
 
-    console.log('✅ Sale found:', {
-      invoiceNo: sell.invoiceNo,
-      status: sell.saleStatus,
-      totalItems: sell.items.length,
-      saleDate: sell.createdAt,
-    });
+
 
     // Only process delivered or partially delivered sales
     if (!['DELIVERED', 'PARTIALLY_DELIVERED'].includes(sell.saleStatus)) {
@@ -75,7 +66,6 @@ const createMissingStockLedgerForSale = async (saleId, userId) => {
       );
     }
 
-    console.log('🔄 Starting transaction...');
 
     const result = await prisma.$transaction(
       async (tx) => {
@@ -83,7 +73,6 @@ const createMissingStockLedgerForSale = async (saleId, userId) => {
         const missingLedgers = [];
         const errors = [];
 
-        console.log('\n📦 Processing sale items...');
 
         // Process each sell item
         for (const sellItem of sell.items) {

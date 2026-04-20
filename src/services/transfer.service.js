@@ -854,18 +854,10 @@ const completeTransfer = async (transferId, userId) => {
 
         pieceQuantity = item.quantity * product.boxSize;
 
-        console.log(`📦 Product: ${product.name}`);
-        console.log(`   Transfer quantity: ${item.quantity} box(es)`);
-        console.log(`   Box size: ${product.boxSize} pieces/box`);
-        console.log(`   Total pieces: ${pieceQuantity}`);
-        console.log(
-          `   Calculation: ${item.quantity} × ${product.boxSize} = ${pieceQuantity}`,
-        );
+      
       } else {
         pieceQuantity = item.quantity;
-        console.log(`📦 Product: ${product.name}`);
-        console.log(`   Transfer quantity: ${item.quantity} piece(s)`);
-        console.log(`   Total pieces: ${pieceQuantity}`);
+       
       }
 
       // Validate piece quantity is positive
@@ -907,10 +899,7 @@ const completeTransfer = async (transferId, userId) => {
         }
 
         const newSourceQuantity = sourceStock.quantity - pieceQuantity;
-        console.log(`   Source store current: ${sourceStock.quantity} pieces`);
-        console.log(
-          `   Source store after removal: ${newSourceQuantity} pieces`,
-        );
+      
 
         sourceOperations.push(
           tx.storeStock.update({
@@ -969,10 +958,7 @@ const completeTransfer = async (transferId, userId) => {
         }
 
         const newSourceQuantity = sourceStock.quantity - pieceQuantity;
-        console.log(`   Source shop current: ${sourceStock.quantity} pieces`);
-        console.log(
-          `   Source shop after removal: ${newSourceQuantity} pieces`,
-        );
+   
 
         sourceOperations.push(
           tx.shopStock.update({
@@ -1086,8 +1072,7 @@ const completeTransfer = async (transferId, userId) => {
         );
       }
 
-      console.log(`   ✅ Stock operations prepared`);
-      console.log(`   ---`);
+    
     }
 
     // Execute all operations in parallel
@@ -1108,8 +1093,7 @@ const completeTransfer = async (transferId, userId) => {
       }
     }
 
-    console.log(`🎉 Transfer ${transfer.shortCode} completed successfully!`);
-    console.log(`   Total pieces transferred: ${totalPiecesTransferred}`);
+
 
     // Update transfer status to COMPLETED
     const updatedTransfer = await tx.transfer.update({

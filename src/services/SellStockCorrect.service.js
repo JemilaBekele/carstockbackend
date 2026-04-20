@@ -533,24 +533,13 @@ const approveSellStockCorrection = async (
   userId,
   deliveredItemIds = [],
 ) => {
-  console.log('=== Starting approveSellStockCorrection ===');
-  console.log('Input params:', {
-    sellStockCorrectionId,
-    userId,
-    deliveredItemIds,
-  });
+ 
 
   const sellStockCorrection = await getSellStockCorrectionById(
     sellStockCorrectionId,
   );
 
-  console.log('Retrieved sellStockCorrection:', {
-    id: sellStockCorrection?.id,
-    status: sellStockCorrection?.status,
-    sellId: sellStockCorrection?.sellId,
-    reference: sellStockCorrection?.reference,
-    notes: sellStockCorrection?.notes,
-  });
+ 
 
   if (!sellStockCorrection) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Sell stock correction not found');
@@ -566,7 +555,6 @@ const approveSellStockCorrection = async (
   const result = await prisma.$transaction(async (tx) => {
     // First, update the itemSaleStatus for the delivered items
     if (deliveredItemIds.length > 0) {
-      console.log('Updating delivered items:', deliveredItemIds);
 
       const updateResult = await tx.sellStockCorrectionItem.updateMany({
         where: {
@@ -579,7 +567,6 @@ const approveSellStockCorrection = async (
         },
       });
 
-      console.log('Update result:', updateResult);
     }
 
     // Fetch updated sell stock correction with items
@@ -595,24 +582,6 @@ const approveSellStockCorrection = async (
       },
     });
 
-    console.log('Updated sellStockCorrection with items:', {
-      id: updatedSellStockCorrection?.id,
-      status: updatedSellStockCorrection?.status,
-      itemsCount: updatedSellStockCorrection?.items?.length,
-      items: updatedSellStockCorrection?.items?.map((item) => ({
-        id: item.id,
-        productId: item.productId,
-        quantity: item.quantity,
-        unitPrice: item.unitPrice,
-        unitOfMeasureId: item.unitOfMeasureId,
-        itemSaleStatus: item.itemSaleStatus,
-        shopId: item.shopId,
-        batches: item.batches?.map((b) => ({
-          batchId: b.batchId,
-          quantity: b.quantity,
-        })),
-      })),
-    });
 
     if (!updatedSellStockCorrection) {
       throw new ApiError(
@@ -627,13 +596,7 @@ const approveSellStockCorrection = async (
       (item) => item.itemSaleStatus === 'DELIVERED',
     ).length;
 
-    console.log('Status calculation:', {
-      allItemsCount,
-      deliveredItemsCount,
-      itemsStatuses: updatedSellStockCorrection.items.map(
-        (i) => i.itemSaleStatus,
-      ),
-    });
+    
 
     let finalStatus = 'APPROVED';
     if (deliveredItemsCount === 0) {
@@ -642,7 +605,6 @@ const approveSellStockCorrection = async (
       finalStatus = 'PARTIAL';
     }
 
-    console.log('Final status determined:', finalStatus);
 
     // Get unit of measures
     const unitOfMeasureIds = updatedSellStockCorrection.items
@@ -658,17 +620,13 @@ const approveSellStockCorrection = async (
       return acc;
     }, {});
 
-    console.log('Unit of measure map:', Object.keys(unitOfMeasureMap));
 
     // Get the associated sell with its items to calculate net total
     let sell = null;
     let netTotalAdjustment = 0;
 
     if (updatedSellStockCorrection.sellId) {
-      console.log(
-        'Fetching associated sell:',
-        updatedSellStockCorrection.sellId,
-      );
+     
 
       sell = await tx.sell.findUnique({
         where: { id: updatedSellStockCorrection.sellId },
@@ -686,11 +644,7 @@ const approveSellStockCorrection = async (
         },
       });
 
-      console.log('Retrieved sell:', {
-        id: sell?.id,
-        NetTotal: sell?.NetTotal,
-        itemsCount: sell?.items?.length,
-      });
+   
 
       if (!sell) {
         throw new ApiError(httpStatus.NOT_FOUND, 'Associated sell not found');

@@ -282,291 +282,11 @@ const getSellStatusPieChart = async () => {
     );
   }
 };
-
-const getTopProductsReportWithPrediction = async () => {
-  try {
-    console.log('=== Starting getTopProductsReportWithPrediction ===');
-
-    // Calculate date range for past 7 months
-    const endDate = new Date();
-    const startDate = new Date();
-    startDate.setMonth(endDate.getMonth() - 7);
-    startDate.setDate(1);
-    startDate.setHours(0, 0, 0, 0);
-    endDate.setHours(23, 59, 59, 999);
-
-    console.log('Date range:', { startDate, endDate });
-
-    // First, check what sale statuses exist in the database
-    const allStatuses = await prisma.sell.groupBy({
-      by: ['saleStatus'],
-      _count: {
-        id: true,
-      },
-    });
-    console.log('Available sale statuses:', allStatuses);
-
-    // Get all sales in the date range (not just APPROVED)
-    // Include DELIVERED, APPROVED, and PARTIALLY_DELIVERED
-    console.log('Fetching sales data...');
-    const sales = await prisma.sell.findMany({
-      where: {
-        saleStatus: {
-          in: ['APPROVED', 'DELIVERED', 'PARTIALLY_DELIVERED'], // Include multiple statuses
-        },
-        saleDate: {
-          gte: startDate,
-          lte: endDate,
-        },
-      },
-      include: {
-        items: {
-          include: {
-            product: {
-              include: {
-                category: true,
-                brand: true,
-              },
-            },
-          },
-        },
-      },
-      orderBy: {
-        saleDate: 'asc',
-      },
-    });
-
-    console.log(`Found ${sales.length} sales in date range`);
-    console.log(
-      'Sample sale statuses:',
-      sales.slice(0, 3).map((s) => ({
-        invoiceNo: s.invoiceNo,
-        saleStatus: s.saleStatus,
-        saleDate: s.saleDate,
-      })),
-    );
-
-    // If no sales found, try to get all sales without date filter to debug
-    if (sales.length === 0) {
-      console.log('No sales found with date filter, checking all sales...');
-      const allSales = await prisma.sell.findMany({
-        take: 5,
-        include: {
-          items: true,
-        },
-      });
-      console.log(
-        'Sample of all sales in database:',
-        allSales.map((s) => ({
-          invoiceNo: s.invoiceNo,
-          saleStatus: s.saleStatus,
-          saleDate: s.saleDate,
-          itemsCount: s.items.length,
-        })),
-      );
-    }
-
-    // If still no sales, return empty report with helpful message
-    if (sales.length === 0) {
-      console.log('No sales data available');
-
-      return {
-        period: {
-          startDate,
-          endDate,
-          monthsCovered: 7,
-        },
-        monthlyReports: [],
-        prediction: {
-          topPredictedProduct: null,
-          stockStatus: null,
-          recommendations: [
-            'No sales data found for the selected period. Please ensure there are approved or delivered sales in the database.',
-          ],
-          alternativeProducts: [],
-        },
-        summary: {
-          totalRevenue: 0,
-          totalQuantity: 0,
-          uniqueProductsSold: 0,
-          averageMonthlyRevenue: 0,
-        },
-        message: 'No sales data available for the past 7 months',
-      };
-    }
-
-    // Group sales by month using reduce
-    console.log('Grouping sales by month...');
-    const monthlyData = sales.reduce((acc, sale) => {
-      const saleDate = new Date(sale.saleDate);
-      const monthKey = `${saleDate.getFullYear()}-${String(
-        saleDate.getMonth() + 1,
-      ).padStart(2, '0')}`;
-
-      if (!acc.has(monthKey)) {
-        acc.set(monthKey, new Map());
-      }
-
-      const productMap = acc.get(monthKey);
-
-      sale.items.forEach((item) => {
-        if (!productMap.has(item.productId)) {
-          productMap.set(item.productId, {
-            productId: item.productId,
-            productName: item.product.name,
-            productCode: item.product.productCode,
-            categoryName: item.product.category?.name || 'Uncategorized',
-            brandName: item.product.brand?.name || 'No Brand',
-            totalQuantity: 0,
-            totalRevenue: 0,
-            averagePrice: 0,
-          });
-        }
-
-        const stats = productMap.get(item.productId);
-        stats.totalQuantity += item.quantity;
-        stats.totalRevenue += item.totalPrice;
-        stats.averagePrice = stats.totalRevenue / stats.totalQuantity;
-      });
-
-      return acc;
-    }, new Map());
-
-    console.log(`Grouped into ${monthlyData.size} months`);
-    console.log('Months found:', Array.from(monthlyData.keys()));
-
-    // Prepare monthly reports with top 50 by revenue and quantity
-    console.log('Preparing monthly reports...');
-    const monthlyReports = [];
-    let totalRevenueAllMonths = 0;
-    let totalQuantityAllMonths = 0;
-    const allProductsSold = new Set();
-
-    monthlyData.forEach((productMap, monthKey) => {
-      const [year, month] = monthKey.split('-');
-      const products = Array.from(productMap.values());
-
-      console.log(`Month ${monthKey}: ${products.length} products`);
-
-      // Update totals
-      products.forEach((product) => {
-        totalRevenueAllMonths += product.totalRevenue;
-        totalQuantityAllMonths += product.totalQuantity;
-        allProductsSold.add(product.productId);
-      });
-
-      // Sort and get top 50 by revenue
-      const topByRevenue = [...products]
-        .sort((a, b) => b.totalRevenue - a.totalRevenue)
-        .slice(0, 50);
-
-      // Sort and get top 50 by quantity
-      const topByQuantity = [...products]
-        .sort((a, b) => b.totalQuantity - a.totalQuantity)
-        .slice(0, 50);
-
-      monthlyReports.push({
-        month: new Date(parseInt(year), parseInt(month) - 1).toLocaleString(
-          'default',
-          { month: 'long' },
-        ),
-        year: parseInt(year),
-        topByRevenue,
-        topByQuantity,
-      });
-    });
-
-    // Sort monthly reports chronologically
-    monthlyReports.sort((a, b) => {
-      const dateA = new Date(`${a.month} ${a.year}`);
-      const dateB = new Date(`${b.month} ${b.year}`);
-      return dateA - dateB;
-    });
-
-    console.log(`Created ${monthlyReports.length} monthly reports`);
-    console.log(
-      `Total revenue: ${totalRevenueAllMonths}, Total quantity: ${totalQuantityAllMonths}`,
-    );
-
-    // Predict next month's top product (only if we have data)
-    let prediction = {
-      topPredictedProduct: null,
-      alternativeProducts: [],
-    };
-
-    if (monthlyData.size > 0) {
-      console.log('Starting prediction...');
-      prediction = await predictNextTopProduct(monthlyData);
-      console.log(
-        'Prediction completed:',
-        prediction.topPredictedProduct?.productName,
-      );
-    }
-
-    // Get stock status for predicted product (only if we have a prediction)
-    let stockStatus = null;
-    if (prediction.topPredictedProduct) {
-      console.log(
-        'Getting stock status for:',
-        prediction.topPredictedProduct?.productId,
-      );
-      stockStatus = await getProductStockStatus(
-        prediction.topPredictedProduct.productId,
-      );
-      console.log('Stock status retrieved');
-    }
-
-    // Generate recommendations
-    let recommendations = [];
-    if (prediction.topPredictedProduct && stockStatus) {
-      recommendations = generateRecommendations(prediction, stockStatus);
-    } else {
-      recommendations = [
-        'Not enough sales data to generate predictions. Continue recording sales to enable predictive analytics.',
-      ];
-    }
-
-    console.log('=== Report generation completed successfully ===');
-
-    return {
-      period: {
-        startDate,
-        endDate,
-        monthsCovered: 7,
-      },
-      monthlyReports,
-      prediction: {
-        topPredictedProduct: prediction.topPredictedProduct,
-        stockStatus,
-        recommendations,
-        alternativeProducts: prediction.alternativeProducts,
-      },
-      summary: {
-        totalRevenue: totalRevenueAllMonths,
-        totalQuantity: totalQuantityAllMonths,
-        uniqueProductsSold: allProductsSold.size,
-        averageMonthlyRevenue: totalRevenueAllMonths / 7,
-      },
-    };
-  } catch (error) {
-    console.error('=== ERROR in getTopProductsReportWithPrediction ===');
-    console.error('Error message:', error.message);
-    console.error('Error stack:', error.stack);
-    throw new ApiError(
-      httpStatus.INTERNAL_SERVER_ERROR,
-      `Error generating top products report: ${error.message}`,
-    );
-  }
-};
-
 const predictNextTopProduct = async (monthlyData) => {
   try {
-    console.log('  - predictNextTopProduct started');
     const months = Array.from(monthlyData.keys()).sort();
-    console.log(`  - Processing ${months.length} months`);
 
     if (months.length === 0) {
-      console.log('  - No months data available');
       return {
         topPredictedProduct: null,
         alternativeProducts: [],
@@ -601,10 +321,8 @@ const predictNextTopProduct = async (monthlyData) => {
       });
     });
 
-    console.log(`  - Tracked ${productPerformance.size} products`);
 
     if (productPerformance.size === 0) {
-      console.log('  - No products found');
       return {
         topPredictedProduct: null,
         alternativeProducts: [],
@@ -694,10 +412,8 @@ const predictNextTopProduct = async (monthlyData) => {
       })
       .filter(Boolean);
 
-    console.log(`  - Generated ${predictions.length} predictions`);
 
     if (predictions.length === 0) {
-      console.log('  - No predictions could be generated');
       return {
         topPredictedProduct: null,
         alternativeProducts: [],
@@ -715,20 +431,11 @@ const predictNextTopProduct = async (monthlyData) => {
     predictions.forEach((pred, idx) => {
       pred.predictedRank = idx + 1;
     });
-
-    console.log(
-      `  - Top product: ${predictions[0]?.productName} (Rank: ${predictions[0]?.predictedRank})`,
-    );
-    console.log('  - predictNextTopProduct completed successfully');
-
     return {
       topPredictedProduct: predictions[0],
       alternativeProducts: predictions.slice(1, 6),
     };
   } catch (error) {
-    console.error('  === ERROR in predictNextTopProduct ===');
-    console.error('  Error message:', error.message);
-    console.error('  Error stack:', error.stack);
     return {
       topPredictedProduct: null,
       alternativeProducts: [],
@@ -738,7 +445,6 @@ const predictNextTopProduct = async (monthlyData) => {
 
 const getProductStockStatus = async (productId) => {
   try {
-    console.log(`    - Fetching product ${productId}...`);
     const product = await prisma.product.findUnique({
       where: { id: productId },
       select: {
@@ -754,15 +460,11 @@ const getProductStockStatus = async (productId) => {
       );
     }
 
-    console.log(`    - Product found: ${product.name}`);
-
-    console.log(`    - Fetching store stocks...`);
     const storeStocks = await prisma.storeStock.findMany({
       where: { productId },
       select: { quantity: true },
     });
 
-    console.log(`    - Fetching shop stocks...`);
     const shopStocks = await prisma.shopStock.findMany({
       where: { productId },
       select: { quantity: true },
@@ -778,9 +480,6 @@ const getProductStockStatus = async (productId) => {
     );
     const totalStock = totalStoreStock + totalShopStock;
 
-    console.log(
-      `    - Total stock: ${totalStock} (Store: ${totalStoreStock}, Shop: ${totalShopStock})`,
-    );
 
     const warningQuantity = product.warningQuantity || 10;
 
@@ -913,6 +612,236 @@ const generateRecommendations = (prediction, stockStatus) => {
 
   return recommendations;
 };
+const getTopProductsReportWithPrediction = async () => {
+  try {
+
+    // Calculate date range for past 7 months
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setMonth(endDate.getMonth() - 7);
+    startDate.setDate(1);
+    startDate.setHours(0, 0, 0, 0);
+    endDate.setHours(23, 59, 59, 999);
+
+
+   
+
+    // Get all sales in the date range (not just APPROVED)
+    // Include DELIVERED, APPROVED, and PARTIALLY_DELIVERED
+    const sales = await prisma.sell.findMany({
+      where: {
+        saleStatus: {
+          in: ['APPROVED', 'DELIVERED', 'PARTIALLY_DELIVERED'], // Include multiple statuses
+        },
+        saleDate: {
+          gte: startDate,
+          lte: endDate,
+        },
+      },
+      include: {
+        items: {
+          include: {
+            product: {
+              include: {
+                category: true,
+                brand: true,
+              },
+            },
+          },
+        },
+      },
+      orderBy: {
+        saleDate: 'asc',
+      },
+    });
+
+ 
+
+    // If no sales found, try to get all sales without date filter to debug
+    if (sales.length === 0) {
+      const allSales = await prisma.sell.findMany({
+        take: 5,
+        include: {
+          items: true,
+        },
+      });
+    
+    }
+
+    // If still no sales, return empty report with helpful message
+    if (sales.length === 0) {
+
+      return {
+        period: {
+          startDate,
+          endDate,
+          monthsCovered: 7,
+        },
+        monthlyReports: [],
+        prediction: {
+          topPredictedProduct: null,
+          stockStatus: null,
+          recommendations: [
+            'No sales data found for the selected period. Please ensure there are approved or delivered sales in the database.',
+          ],
+          alternativeProducts: [],
+        },
+        summary: {
+          totalRevenue: 0,
+          totalQuantity: 0,
+          uniqueProductsSold: 0,
+          averageMonthlyRevenue: 0,
+        },
+        message: 'No sales data available for the past 7 months',
+      };
+    }
+
+    // Group sales by month using reduce
+    const monthlyData = sales.reduce((acc, sale) => {
+      const saleDate = new Date(sale.saleDate);
+      const monthKey = `${saleDate.getFullYear()}-${String(
+        saleDate.getMonth() + 1,
+      ).padStart(2, '0')}`;
+
+      if (!acc.has(monthKey)) {
+        acc.set(monthKey, new Map());
+      }
+
+      const productMap = acc.get(monthKey);
+
+      sale.items.forEach((item) => {
+        if (!productMap.has(item.productId)) {
+          productMap.set(item.productId, {
+            productId: item.productId,
+            productName: item.product.name,
+            productCode: item.product.productCode,
+            categoryName: item.product.category?.name || 'Uncategorized',
+            brandName: item.product.brand?.name || 'No Brand',
+            totalQuantity: 0,
+            totalRevenue: 0,
+            averagePrice: 0,
+          });
+        }
+
+        const stats = productMap.get(item.productId);
+        stats.totalQuantity += item.quantity;
+        stats.totalRevenue += item.totalPrice;
+        stats.averagePrice = stats.totalRevenue / stats.totalQuantity;
+      });
+
+      return acc;
+    }, new Map());
+
+  
+    // Prepare monthly reports with top 50 by revenue and quantity
+    const monthlyReports = [];
+    let totalRevenueAllMonths = 0;
+    let totalQuantityAllMonths = 0;
+    const allProductsSold = new Set();
+
+    monthlyData.forEach((productMap, monthKey) => {
+      const [year, month] = monthKey.split('-');
+      const products = Array.from(productMap.values());
+
+
+      // Update totals
+      products.forEach((product) => {
+        totalRevenueAllMonths += product.totalRevenue;
+        totalQuantityAllMonths += product.totalQuantity;
+        allProductsSold.add(product.productId);
+      });
+
+      // Sort and get top 50 by revenue
+      const topByRevenue = [...products]
+        .sort((a, b) => b.totalRevenue - a.totalRevenue)
+        .slice(0, 50);
+
+      // Sort and get top 50 by quantity
+      const topByQuantity = [...products]
+        .sort((a, b) => b.totalQuantity - a.totalQuantity)
+        .slice(0, 50);
+
+      monthlyReports.push({
+        month: new Date(parseInt(year), parseInt(month) - 1).toLocaleString(
+          'default',
+          { month: 'long' },
+        ),
+        year: parseInt(year),
+        topByRevenue,
+        topByQuantity,
+      });
+    });
+
+    // Sort monthly reports chronologically
+    monthlyReports.sort((a, b) => {
+      const dateA = new Date(`${a.month} ${a.year}`);
+      const dateB = new Date(`${b.month} ${b.year}`);
+      return dateA - dateB;
+    });
+
+  
+
+    // Predict next month's top product (only if we have data)
+    let prediction = {
+      topPredictedProduct: null,
+      alternativeProducts: [],
+    };
+
+    if (monthlyData.size > 0) {
+      prediction = await predictNextTopProduct(monthlyData);
+     
+    }
+
+    // Get stock status for predicted product (only if we have a prediction)
+    let stockStatus = null;
+    if (prediction.topPredictedProduct) {
+     
+      stockStatus = await getProductStockStatus(
+        prediction.topPredictedProduct.productId,
+      );
+    }
+
+    // Generate recommendations
+    let recommendations = [];
+    if (prediction.topPredictedProduct && stockStatus) {
+      recommendations = generateRecommendations(prediction, stockStatus);
+    } else {
+      recommendations = [
+        'Not enough sales data to generate predictions. Continue recording sales to enable predictive analytics.',
+      ];
+    }
+
+
+    return {
+      period: {
+        startDate,
+        endDate,
+        monthsCovered: 7,
+      },
+      monthlyReports,
+      prediction: {
+        topPredictedProduct: prediction.topPredictedProduct,
+        stockStatus,
+        recommendations,
+        alternativeProducts: prediction.alternativeProducts,
+      },
+      summary: {
+        totalRevenue: totalRevenueAllMonths,
+        totalQuantity: totalQuantityAllMonths,
+        uniqueProductsSold: allProductsSold.size,
+        averageMonthlyRevenue: totalRevenueAllMonths / 7,
+      },
+    };
+  } catch (error) {
+ 
+    throw new ApiError(
+      httpStatus.INTERNAL_SERVER_ERROR,
+      `Error generating top products report: ${error.message}`,
+    );
+  }
+};
+
+
 
 module.exports = {
   getAllTotalsWithItems,

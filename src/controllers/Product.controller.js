@@ -146,7 +146,6 @@ const getActiveAllProducts = catchAsync(async (req, res) => {
 
 const getProducts = catchAsync(async (req, res) => {
   const userId = req.user.id;
-  console.log('Fetching products for user ID:', userId);
 
   const result = await productService.getAllProducts(userId);
   res.status(httpStatus.OK).send({
@@ -187,12 +186,7 @@ const getTopSellingProducts = catchAsync(async (req, res) => {
     );
   }
 
-  console.log('getTopSellingProducts params:', {
-    userId,
-    searchTerm: processedSearchTerm,
-    categoryName: processedCategoryName,
-    brandName: processedBrandName,
-  });
+
 
   const result = await productService.getTopSellingProducts(
     userId,

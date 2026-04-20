@@ -6,7 +6,6 @@ const prisma = require('./prisma');
 // Factory Reset - Delete all data
 const factoryReset = async () => {
   try {
-    console.log('🚨 Starting factory reset...');
 
     // Disable foreign key checks
     await prisma.$executeRaw`SET FOREIGN_KEY_CHECKS = 0;`;
@@ -51,7 +50,6 @@ const factoryReset = async () => {
     // Re-enable foreign key checks
     await prisma.$executeRaw`SET FOREIGN_KEY_CHECKS = 1;`;
 
-    console.log('✅ Factory reset completed successfully');
     return {
       success: true,
       message: 'All data has been successfully deleted. Database is now empty.',

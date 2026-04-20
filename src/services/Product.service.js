@@ -433,64 +433,42 @@ const parseFormData = (data) => {
 
 const createProduct = async (productBody, files) => {
   try {
-    console.log('=== createProduct START ===');
-    console.log('productBody:', JSON.stringify(productBody, null, 2));
-    console.log(
-      'files:',
-      files
-        ? files.image
-          ? 'Image file present'
-          : 'No image file'
-        : 'No files object',
-    );
+   
 
     // Generate product code if not provided
     let { productCode } = productBody;
     const { name } = productBody;
 
-    console.log('Processing productCode:', productCode);
-    console.log('Processing name:', name);
+
 
     if (!productCode || productCode.trim() === '') {
-      console.log('Generating new product code...');
       productCode = await generateUniqueProductCode();
-      console.log('Generated product code:', productCode);
     }
 
     // Check if product with same code already exists
-    console.log('Checking if product code exists:', productCode);
     const existingProductByCode = await getProductByCode(productCode);
     if (existingProductByCode) {
-      console.error('Product code already exists:', productCode);
       throw new ApiError(httpStatus.BAD_REQUEST, 'Product code already taken');
     }
 
     // Check if product with same name already exists
-    console.log('Checking if product name exists:', name);
     const existingProductByName = await getProductByName(name);
     if (existingProductByName) {
-      console.error('Product name already exists:', name);
       throw new ApiError(httpStatus.BAD_REQUEST, 'Product name already exists');
     }
 
-    console.log('Parsing form data...');
     const parsedData = parseFormData(productBody);
-    console.log(
-      'Parsed data (before conversion):',
-      JSON.stringify(parsedData, null, 2),
-    );
+ 
 
     // Convert string boolean values to actual booleans
     if (parsedData.hasBox !== undefined) {
       parsedData.hasBox =
         parsedData.hasBox === 'true' || parsedData.hasBox === true;
-      console.log('Converted hasBox to:', parsedData.hasBox);
     }
 
     if (parsedData.isActive !== undefined) {
       parsedData.isActive =
         parsedData.isActive === 'true' || parsedData.isActive === true;
-      console.log('Converted isActive to:', parsedData.isActive);
     }
 
     // Convert numeric strings to numbers
@@ -500,7 +478,6 @@ const createProduct = async (productBody, files) => {
       parsedData.boxSize !== ''
     ) {
       parsedData.boxSize = parseInt(parsedData.boxSize);
-      console.log('Converted boxSize to:', parsedData.boxSize);
     }
 
     if (
@@ -509,7 +486,6 @@ const createProduct = async (productBody, files) => {
       parsedData.sellPrice !== ''
     ) {
       parsedData.sellPrice = parseFloat(parsedData.sellPrice);
-      console.log('Converted sellPrice to:', parsedData.sellPrice);
     }
 
     parsedData.productCode = productCode;
@@ -522,16 +498,10 @@ const createProduct = async (productBody, files) => {
       : files?.image;
 
     if (imageFile) {
-      console.log('Processing image file:', {
-        originalname: imageFile.originalname,
-        mimetype: imageFile.mimetype,
-        size: imageFile.size,
-      });
+   
       try {
         imageUrl = await uploadImage(imageFile, 'product_images');
-        console.log('Image uploaded successfully. URL:', imageUrl);
       } catch (err) {
-        console.error('Image upload failed:', err);
         throw new ApiError(
           httpStatus.INTERNAL_SERVER_ERROR,
           'Product image processing failed',
@@ -542,16 +512,11 @@ const createProduct = async (productBody, files) => {
     }
 
     const { additionalPrices, ...productData } = parsedData;
-    console.log(
-      'Product data (after conversion):',
-      JSON.stringify(productData, null, 2),
-    );
-    console.log('Additional prices:', additionalPrices);
+ 
 
     // Prepare additional prices data
     let additionalPricesData;
     if (additionalPrices && additionalPrices.length > 0) {
-      console.log(`Processing ${additionalPrices.length} additional prices...`);
       additionalPricesData = {
         create: additionalPrices.map((price, index) => {
           const priceData = {
@@ -563,14 +528,12 @@ const createProduct = async (productBody, files) => {
             shopId: price.shopId || null,
             isBox: price.isBox === 'true' || price.isBox === true || false, // Handle isBox field
           };
-          console.log(`Additional price ${index + 1}:`, priceData);
           return priceData;
         }),
       };
     }
 
     // Create product
-    console.log('Creating product in database...');
     const product = await prisma.product.create({
       data: {
         ...productData,
@@ -584,15 +547,10 @@ const createProduct = async (productBody, files) => {
       },
     });
 
-    console.log('Product created successfully. ID:', product.id);
-    console.log('=== createProduct END ===');
-
+  
     return product;
   } catch (error) {
-    console.error('=== createProduct ERROR ===');
-    console.error('Error type:', error.constructor.name);
-    console.error('Error message:', error.message);
-    console.error('Error stack:', error.stack);
+  
 
     // Log Prisma-specific error details
     if (error.code) {
@@ -621,24 +579,12 @@ const createProduct = async (productBody, files) => {
 };
 
 const updateProduct = async (id, updateBody, files) => {
-  console.log('=== updateProduct START ===');
-  console.log('Product ID:', id);
-  console.log('Update Body:', JSON.stringify(updateBody, null, 2));
-  console.log(
-    'Files:',
-    files
-      ? files.image
-        ? 'Image file present'
-        : 'No image file'
-      : 'No files object',
-  );
+
 
   try {
     const existingProduct = await getProductById(id);
-    console.log('Existing product found:', existingProduct ? 'Yes' : 'No');
 
     if (!existingProduct) {
-      console.error('Product not found:', id);
       throw new ApiError(httpStatus.NOT_FOUND, 'Product not found');
     }
 
@@ -647,29 +593,21 @@ const updateProduct = async (id, updateBody, files) => {
       updateBody.productCode &&
       updateBody.productCode !== existingProduct.productCode
     ) {
-      console.log(
-        'Checking if product code already exists:',
-        updateBody.productCode,
-      );
+    
       const existingProductByCode = await getProductByCode(
         updateBody.productCode,
       );
       if (existingProductByCode) {
-        console.error('Product code already taken:', updateBody.productCode);
         throw new ApiError(
           httpStatus.BAD_REQUEST,
           'Product code already taken',
         );
       }
-      console.log('Product code is available');
     }
 
-    console.log('Parsing form data...');
     const parsedData = parseFormData(updateBody);
-    console.log('Parsed data:', JSON.stringify(parsedData, null, 2));
 
     let { imageUrl } = existingProduct;
-    console.log('Current image URL:', imageUrl);
 
     // Process the product image if provided
     const imageFile = Array.isArray(files?.image)
@@ -677,16 +615,10 @@ const updateProduct = async (id, updateBody, files) => {
       : files?.image;
 
     if (imageFile) {
-      console.log('Processing image file:', {
-        originalname: imageFile.originalname,
-        mimetype: imageFile.mimetype,
-        size: imageFile.size,
-      });
+   
       try {
         imageUrl = await uploadImage(imageFile, 'product_images');
-        console.log('Image uploaded successfully. New URL:', imageUrl);
       } catch (err) {
-        console.error('Image upload failed:', err);
         throw new ApiError(
           httpStatus.INTERNAL_SERVER_ERROR,
           'Product image processing failed',
@@ -697,12 +629,7 @@ const updateProduct = async (id, updateBody, files) => {
     }
 
     const { additionalPrices, ...productData } = parsedData;
-    console.log(
-      'Product data (without additional prices):',
-      JSON.stringify(productData, null, 2),
-    );
-    console.log('Additional prices:', additionalPrices);
-
+  
     // Prepare the update data
     const updateData = {
       ...productData,
@@ -718,7 +645,6 @@ const updateProduct = async (id, updateBody, files) => {
     if (productData.hasBox !== undefined) {
       updateData.hasBox =
         productData.hasBox === 'true' || productData.hasBox === true;
-      console.log('Converted hasBox to:', updateData.hasBox);
     }
 
     if (
@@ -727,27 +653,20 @@ const updateProduct = async (id, updateBody, files) => {
       productData.boxSize !== ''
     ) {
       updateData.boxSize = parseInt(productData.boxSize);
-      console.log('Converted boxSize to:', updateData.boxSize);
     }
 
-    console.log('Final update data:', JSON.stringify(updateData, null, 2));
 
     // Handle additional prices update
     if (additionalPrices !== undefined) {
-      console.log('Processing additional prices update...');
 
       // First, delete existing additional prices for this product
-      console.log('Deleting existing additional prices for product:', id);
       const deleteResult = await prisma.additionalPrice.deleteMany({
         where: { productId: id },
       });
-      console.log(`Deleted ${deleteResult.count} existing additional prices`);
 
       // Then create new ones if provided
       if (additionalPrices && additionalPrices.length > 0) {
-        console.log(
-          `Creating ${additionalPrices.length} new additional prices...`,
-        );
+      
         const processedPrices = additionalPrices.map((price, index) => {
           const priceData = {
             label: price.label,
@@ -755,7 +674,6 @@ const updateProduct = async (id, updateBody, files) => {
             shopId: price.shopId || null,
             isBox: price.isBox === 'true' || price.isBox === true || false, // Handle isBox field
           };
-          console.log(`Additional price ${index + 1}:`, priceData);
           return priceData;
         });
 
@@ -767,7 +685,6 @@ const updateProduct = async (id, updateBody, files) => {
       }
     }
 
-    console.log('Updating product in database...');
     const updatedProduct = await prisma.product.update({
       where: { id },
       data: updateData,
@@ -777,17 +694,9 @@ const updateProduct = async (id, updateBody, files) => {
         AdditionalPrice: true,
       },
     });
-
-    console.log('Product updated successfully. ID:', updatedProduct.id);
-    console.log('=== updateProduct END ===');
-
     return updatedProduct;
   } catch (error) {
-    console.error('=== updateProduct ERROR ===');
-    console.error('Error type:', error.constructor.name);
-    console.error('Error message:', error.message);
-    console.error('Error stack:', error.stack);
-
+  
     // Log Prisma-specific error details
     if (error.code) {
       console.error('Prisma error code:', error.code);
@@ -1033,8 +942,6 @@ const searchProducts = async (
   categoryFilter = null,
   brandFilter = null,
 ) => {
-  console.log('=== searchProducts START ===');
-  console.log('Parameters:', { searchTerm, categoryFilter, brandFilter });
 
   try {
     let categoryId = null;
@@ -1042,10 +949,8 @@ const searchProducts = async (
 
     // Handle category filter
     if (categoryFilter) {
-      console.log('Processing category filter:', categoryFilter);
       if (isValidUUID(categoryFilter)) {
         categoryId = categoryFilter;
-        console.log('Category filter is UUID:', categoryId);
       } else {
         const category = await prisma.category.findFirst({
           where: { name: categoryFilter },
@@ -1053,9 +958,7 @@ const searchProducts = async (
         });
         if (category) {
           categoryId = category.id;
-          console.log('Category found with ID:', categoryId);
         } else {
-          console.log('Category not found:', categoryFilter);
           return {
             products: [],
             count: 0,
@@ -1067,10 +970,8 @@ const searchProducts = async (
 
     // Handle brand filter
     if (brandFilter) {
-      console.log('Processing brand filter:', brandFilter);
       if (isValidUUID(brandFilter)) {
         brandId = brandFilter;
-        console.log('Brand filter is UUID:', brandId);
       } else {
         const brand = await prisma.brand.findFirst({
           where: { name: brandFilter },
@@ -1078,9 +979,7 @@ const searchProducts = async (
         });
         if (brand) {
           brandId = brand.id;
-          console.log('Brand found with ID:', brandId);
         } else {
-          console.log('Brand not found:', brandFilter);
           return {
             products: [],
             count: 0,
@@ -1118,7 +1017,6 @@ const searchProducts = async (
         }),
     };
 
-    console.log('Search where clause:', JSON.stringify(whereClause, null, 2));
 
     // Get ALL products that match the search criteria (no take/limit)
     const matchedProducts = await prisma.product.findMany({
@@ -1141,10 +1039,6 @@ const searchProducts = async (
         name: 'asc', // Optional: sort alphabetically
       },
     });
-
-    console.log(`Found ${matchedProducts.length} products matching search`);
-    console.log('=== searchProducts END ===');
-
     return {
       products: matchedProducts.map((product) => ({ product })),
       count: matchedProducts.length,
@@ -1163,8 +1057,6 @@ const getTopSellingProducts = async (
   categoryName = null,
   brandName = null,
 ) => {
-  console.log('=== getTopSellingProducts START ===');
-  console.log('Parameters:', { userId, searchTerm, categoryName, brandName });
 
   try {
     let categoryId = null;
@@ -1172,39 +1064,32 @@ const getTopSellingProducts = async (
 
     // Resolve category ID if provided
     if (categoryName) {
-      console.log('Looking up category by name:', categoryName);
       const category = await prisma.category.findFirst({
         where: { name: categoryName },
         select: { id: true },
       });
       if (category) {
         categoryId = category.id;
-        console.log('Category found with ID:', categoryId);
       } else {
-        console.log('Category not found:', categoryName);
         return { products: [], count: 0, note: 'Category not found' };
       }
     }
 
     // Resolve brand ID if provided
     if (brandName) {
-      console.log('Looking up brand by name:', brandName);
       const brand = await prisma.brand.findFirst({
         where: { name: brandName },
         select: { id: true },
       });
       if (brand) {
         brandId = brand.id;
-        console.log('Brand found with ID:', brandId);
       } else {
-        console.log('Brand not found:', brandName);
         return { products: [], count: 0, note: 'Brand not found' };
       }
     }
 
     // If search term provided, use searchProducts
     if (searchTerm && searchTerm.trim() !== '') {
-      console.log('🔍 Search mode - using searchProducts');
       const searchResult = await searchProducts(
         searchTerm,
         categoryId,
@@ -1214,7 +1099,6 @@ const getTopSellingProducts = async (
     }
 
     // No search term - get products with filters
-    console.log('📊 Getting products with filters:', { categoryId, brandId });
 
     // Get ALL eligible products that match the filters
     const allEligibleProducts = await prisma.product.findMany({
@@ -1238,12 +1122,9 @@ const getTopSellingProducts = async (
       },
     });
 
-    console.log(
-      `Found ${allEligibleProducts.length} total products matching filters`,
-    );
+   
 
     if (allEligibleProducts.length === 0) {
-      console.log('No products match the filters');
       return {
         products: [],
         count: 0,
@@ -1272,7 +1153,6 @@ const getTopSellingProducts = async (
     });
 
     const productIdsWithSales = productsWithSales.map((item) => item.productId);
-    console.log(`Products with sales data: ${productIdsWithSales.length}`);
 
     // Separate products into those with sales and those without
     const productsWithSalesData = allEligibleProducts.filter((p) =>
@@ -1282,9 +1162,6 @@ const getTopSellingProducts = async (
       (p) => !productIdsWithSales.includes(p.id),
     );
 
-    console.log(
-      `Products with sales: ${productsWithSalesData.length}, without sales: ${productsWithoutSales.length}`,
-    );
 
     // Sort products with sales by their sales quantity
     productsWithSalesData.sort((a, b) => {
@@ -1317,22 +1194,9 @@ const getTopSellingProducts = async (
 
       const needed = MAX_PRODUCTS - finalProducts.length;
       finalProducts.push(...shuffledWithoutSales.slice(0, needed));
-      console.log(
-        `Added ${Math.min(
-          needed,
-          shuffledWithoutSales.length,
-        )} random products to reach ${MAX_PRODUCTS} total`,
-      );
+    
     }
 
-    console.log(
-      `Returning ${finalProducts.length} products (${
-        productsWithSalesData.length
-      } top sellers + ${
-        finalProducts.length - productsWithSalesData.length
-      } random)`,
-    );
-    console.log('=== getTopSellingProducts END ===');
 
     return {
       products: finalProducts.map((product) => ({ product })),
@@ -1415,12 +1279,9 @@ const getRandomProductsWithShopStocks = async (userId = null) => {
   };
 };
 const getProductByShops = async (productId) => {
-  console.log('=== getProductByShops START ===');
-  console.log('Product ID:', productId);
 
   try {
     // Get all available shop stocks for the product
-    console.log('Fetching shop stocks for product...');
     const shopStocks = await prisma.shopStock.findMany({
       where: {
         productId,
@@ -1447,13 +1308,10 @@ const getProductByShops = async (productId) => {
       },
     });
 
-    console.log('Shop stocks found:', shopStocks.length);
 
     // If no shop stocks found, return empty response instead of throwing error
     if (!shopStocks || shopStocks.length === 0) {
-      console.log(
-        'No available stock found for this product in any shop - returning empty response',
-      );
+      
 
       // Get product details even if no stock
       const product = await prisma.product.findUnique({
@@ -1482,7 +1340,6 @@ const getProductByShops = async (productId) => {
     }
 
     // Get all pending/approved sells that affect stock availability
-    console.log('Fetching pending sells...');
     const pendingSells = await prisma.sell.findMany({
       where: {
         items: {
@@ -1507,22 +1364,16 @@ const getProductByShops = async (productId) => {
       },
     });
 
-    console.log('Pending sells found:', pendingSells.length);
 
     // Calculate reserved quantities by shop (in pieces)
     const reservedQuantitiesByShop = new Map();
 
     pendingSells.forEach((sell, sellIndex) => {
-      console.log(`Processing sell ${sellIndex + 1}:`, sell.id);
       sell.items.forEach((item, itemIndex) => {
         if (item.productId === productId && item.itemSaleStatus === 'PENDING') {
           const currentReserved =
             reservedQuantitiesByShop.get(item.shopId) || 0;
-          console.log(
-            `  Item ${itemIndex + 1}: Shop ${item.shopId}, Quantity: ${
-              item.quantity
-            }, Current Reserved: ${currentReserved}`,
-          );
+       
           reservedQuantitiesByShop.set(
             item.shopId,
             currentReserved + item.quantity,
@@ -1531,49 +1382,36 @@ const getProductByShops = async (productId) => {
       });
     });
 
-    console.log(
-      'Reserved quantities by shop:',
-      Object.fromEntries(reservedQuantitiesByShop),
-    );
+  
 
     // Aggregate quantities by shop and collect additional prices
     const shopsMap = new Map();
     let totalAvailableQuantity = 0;
 
     shopStocks.forEach((stock, stockIndex) => {
-      console.log(`\n--- Processing stock ${stockIndex + 1} ---`);
-      console.log('Stock shop ID:', stock.shopId);
-      console.log('Stock quantity:', stock.quantity);
+     
 
       const reservedQuantity = reservedQuantitiesByShop.get(stock.shopId) || 0;
-      console.log('Reserved quantity for this shop:', reservedQuantity);
 
       const netAvailableQuantity = Math.max(
         0,
         stock.quantity - reservedQuantity,
       );
-      console.log('Net available quantity:', netAvailableQuantity);
 
       totalAvailableQuantity += netAvailableQuantity;
-      console.log('Total available quantity so far:', totalAvailableQuantity);
 
       if (shopsMap.has(stock.shop.id)) {
-        console.log('Shop already in map, updating quantity...');
         const existingShop = shopsMap.get(stock.shop.id);
         existingShop.quantity += netAvailableQuantity;
-        console.log('Updated shop quantity:', existingShop.quantity);
       } else {
-        console.log('New shop, creating entry...');
 
         // Get base product price
         const basePrice = stock.product.sellPrice;
-        console.log('Base price:', basePrice);
 
         // Filter additional prices for this specific shop
         const shopAdditionalPrices = stock.product.AdditionalPrice.filter(
           (ap) => ap.shopId === null || ap.shopId === stock.shop.id,
         );
-        console.log('Additional prices found:', shopAdditionalPrices.length);
 
         // Calculate total price (base + sum of additional prices)
         let totalPrice = null;
@@ -1584,11 +1422,7 @@ const getProductByShops = async (productId) => {
             0,
           );
           totalPrice = base + additionalTotal;
-          console.log('Total price calculation:', {
-            base,
-            additionalTotal,
-            totalPrice,
-          });
+        
         }
 
         // Calculate box availability if product supports boxes
@@ -1596,9 +1430,7 @@ const getProductByShops = async (productId) => {
         let remainingPieces = netAvailableQuantity;
         let boxSize = null;
 
-        console.log('Product hasBox:', stock.product.hasBox);
-        console.log('Product boxSize:', stock.product.boxSize);
-
+      
         if (
           stock.product.hasBox &&
           stock.product.boxSize &&
@@ -1607,11 +1439,7 @@ const getProductByShops = async (productId) => {
           boxSize = stock.product.boxSize;
           availableBoxes = Math.floor(netAvailableQuantity / boxSize);
           remainingPieces = netAvailableQuantity % boxSize;
-          console.log('Box calculation:', {
-            boxSize,
-            availableBoxes,
-            remainingPieces,
-          });
+         
         }
 
         const shopData = {
@@ -1634,16 +1462,11 @@ const getProductByShops = async (productId) => {
           UnitOfMeasure: stock.product.UnitOfMeasure,
         };
 
-        console.log('Shop data created:', JSON.stringify(shopData, null, 2));
         shopsMap.set(stock.shop.id, shopData);
       }
     });
 
-    console.log('\n--- Final shops map ---');
-    console.log('Number of shops:', shopsMap.size);
-
     // Get product details for box support info
-    console.log('\nFetching product details...');
     const product = await prisma.product.findUnique({
       where: { id: productId },
       select: {
@@ -1655,7 +1478,6 @@ const getProductByShops = async (productId) => {
       },
     });
 
-    console.log('Product details:', JSON.stringify(product, null, 2));
 
     const result = {
       totalAvailableQuantity,
@@ -1670,14 +1492,9 @@ const getProductByShops = async (productId) => {
       },
     };
 
-    console.log('\n=== getProductByShops END ===');
     return result;
   } catch (error) {
-    console.error('=== getProductByShops ERROR ===');
-    console.error('Error type:', error.constructor.name);
-    console.error('Error message:', error.message);
-    console.error('Error stack:', error.stack);
-
+ 
     if (error.code) {
       console.error('Prisma error code:', error.code);
     }

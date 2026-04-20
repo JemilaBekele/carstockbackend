@@ -221,7 +221,6 @@ const getAllSells = async ({
       },
     },
   });
-  console.log('Sells fetched:', sells.length);
   return {
     sells,
     count: sells.length,
@@ -462,14 +461,10 @@ const createSell = async (sellBody, userId) => {
     },
   });
 
-  console.log('=== createSell END ===');
   return sell;
 };
 // Update Sell
 const updateSell = async (sellId, sellBody, userId) => {
-  console.log('=== updateSell START ===');
-  console.log('Sell ID:', sellId);
-
   const existingSell = await getSellById(sellId);
   if (!existingSell) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Sale not found');
@@ -606,11 +601,6 @@ const updateSell = async (sellId, sellBody, userId) => {
         );
       }
       pieceQuantity = item.quantity * product.boxSize;
-      console.log(
-        `Item ${index + 1}: Converting ${
-          item.quantity
-        } box(es) to ${pieceQuantity} pieces`,
-      );
     }
 
     const availableStock = shopStocks
@@ -729,7 +719,7 @@ const updateSell = async (sellId, sellBody, userId) => {
           productId: item.productId,
           shopId: item.shopId,
           isBox: item.isBox,
-                    remainingQuantity: item.quantity,
+          remainingQuantity: item.quantity,
 
           quantity: item.quantity,
           unitPrice: item.unitPrice,
@@ -740,7 +730,7 @@ const updateSell = async (sellId, sellBody, userId) => {
           productId: item.productId,
           shopId: item.shopId,
           isBox: item.isBox,
-                    remainingQuantity: item.quantity,
+          remainingQuantity: item.quantity,
 
           quantity: item.quantity,
           unitPrice: item.unitPrice,
@@ -780,7 +770,7 @@ const updateSell = async (sellId, sellBody, userId) => {
             productId: item.productId,
             shopId: item.shopId,
             isBox: item.isBox,
-                      remainingQuantity: item.quantity,
+            remainingQuantity: item.quantity,
 
             quantity: item.quantity, // Store as pieces in the database
             unitPrice: item.unitPrice, // Unit price remains unchanged
@@ -865,10 +855,6 @@ const updateSell = async (sellId, sellBody, userId) => {
           );
         });
       });
-
-      console.log(
-        `📢 Notifications sent for updated & approved sale #${result.invoiceNo}`,
-      );
     } catch (notificationError) {
       console.error('❌ Error in notification process:', notificationError);
     }
@@ -1008,7 +994,6 @@ const deleteSell = async (id, userId) => {
 };
 
 const completeSaleDelivery = async (saleId, deliveryData, userId) => {
-
   const sell = await getSellById(saleId);
 
   if (!sell) {
@@ -1028,8 +1013,6 @@ const completeSaleDelivery = async (saleId, deliveryData, userId) => {
       },
     });
 
-    console.log('Sell items to deliver:', sellItemsToDeliver.length);
-
     if (sellItemsToDeliver.length === 0) {
       throw new ApiError(
         httpStatus.BAD_REQUEST,
@@ -1047,7 +1030,7 @@ const completeSaleDelivery = async (saleId, deliveryData, userId) => {
 
     // Process each delivery item
     const processedItems = [];
-    
+
     for (const deliveryItem of deliveryData.items) {
       const sellItem = sellItemsToDeliver.find(
         (item) => item.id === deliveryItem.itemId,
@@ -1061,17 +1044,21 @@ const completeSaleDelivery = async (saleId, deliveryData, userId) => {
       }
 
       // Get the given quantity (use provided value or deliver remaining)
-      const givenQty = deliveryItem.givenQuantity || 
-        (sellItem.remainingQuantity > 0 ? sellItem.remainingQuantity : sellItem.quantity);
-      
+      const givenQty =
+        deliveryItem.givenQuantity ||
+        (sellItem.remainingQuantity > 0
+          ? sellItem.remainingQuantity
+          : sellItem.quantity);
+
       // Calculate new remaining quantity (simple subtraction)
-      const currentRemaining = sellItem.remainingQuantity !== null && 
+      const currentRemaining =
+        sellItem.remainingQuantity !== null &&
         sellItem.remainingQuantity !== undefined
           ? sellItem.remainingQuantity
           : sellItem.quantity;
-      
+
       const newRemainingQuantity = currentRemaining - givenQty;
-      
+
       // Calculate total given quantity so far
       const totalGivenSoFar = (sellItem.givenQuantity || 0) + givenQty;
 
@@ -1083,19 +1070,7 @@ const completeSaleDelivery = async (saleId, deliveryData, userId) => {
         newItemStatus = 'PARTIALLY_DELIVERED';
       }
 
-      console.log(`Processing item ${sellItem.id}:`, {
-        productId: sellItem.productId,
-        productName: sellItem.product.name,
-        isBox: sellItem.isBox,
-        boxSize: sellItem.product.boxSize,
-        totalQuantity: sellItem.quantity,
-        previousGiven: sellItem.givenQuantity || 0,
-        currentGiven: givenQty,
-        totalGiven: totalGivenSoFar,
-        previousRemaining: currentRemaining,
-        newRemaining: newRemainingQuantity,
-        newStatus: newItemStatus,
-      });
+   
 
       if (givenQty <= 0) {
         throw new ApiError(
@@ -1143,7 +1118,7 @@ const completeSaleDelivery = async (saleId, deliveryData, userId) => {
     // Calculate piece quantities for stock removal
     const processedItemsWithPieces = processedItems.map((item) => {
       let pieceQuantity = item.givenQty;
-      
+
       // If it's a box, convert to pieces for stock removal
       if (item.sellItem.isBox) {
         if (!item.sellItem.product.hasBox || !item.sellItem.product.boxSize) {
@@ -1153,9 +1128,8 @@ const completeSaleDelivery = async (saleId, deliveryData, userId) => {
           );
         }
         pieceQuantity = item.givenQty * item.sellItem.product.boxSize;
-        console.log(`📦 Converting ${item.givenQty} boxes to ${pieceQuantity} pieces for stock removal`);
       }
-      
+
       return {
         ...item,
         pieceQuantity,
@@ -1163,35 +1137,34 @@ const completeSaleDelivery = async (saleId, deliveryData, userId) => {
     });
 
     // Validate stock availability for all items
-    const stockValidationPromises = processedItemsWithPieces.map(async (item) => {
-      const shopStock = await tx.shopStock.findUnique({
-        where: {
-          shopId_productId: {
-            shopId: item.sellItem.shopId,
-            productId: item.sellItem.productId,
+    const stockValidationPromises = processedItemsWithPieces.map(
+      async (item) => {
+        const shopStock = await tx.shopStock.findUnique({
+          where: {
+            shopId_productId: {
+              shopId: item.sellItem.shopId,
+              productId: item.sellItem.productId,
+            },
           },
-        },
-      });
+        });
 
-      if (!shopStock) {
-        throw new ApiError(
-          httpStatus.BAD_REQUEST,
-          `Product "${item.sellItem.product.name}" not found in shop stock for delivery.`,
-        );
-      }
+        if (!shopStock) {
+          throw new ApiError(
+            httpStatus.BAD_REQUEST,
+            `Product "${item.sellItem.product.name}" not found in shop stock for delivery.`,
+          );
+        }
 
-      console.log(`Current shop stock: ${shopStock.quantity} pieces`);
-      console.log(`Requested to remove: ${item.pieceQuantity} pieces`);
+        if (shopStock.quantity < item.pieceQuantity) {
+          throw new ApiError(
+            httpStatus.BAD_REQUEST,
+            `Insufficient stock for product "${item.sellItem.product.name}" in shop. Available: ${shopStock.quantity} pieces, Requested: ${item.pieceQuantity} pieces`,
+          );
+        }
 
-      if (shopStock.quantity < item.pieceQuantity) {
-        throw new ApiError(
-          httpStatus.BAD_REQUEST,
-          `Insufficient stock for product "${item.sellItem.product.name}" in shop. Available: ${shopStock.quantity} pieces, Requested: ${item.pieceQuantity} pieces`,
-        );
-      }
-
-      return item;
-    });
+        return item;
+      },
+    );
 
     const validatedItems = await Promise.all(stockValidationPromises);
 
@@ -1234,21 +1207,17 @@ const completeSaleDelivery = async (saleId, deliveryData, userId) => {
           remainingQuantity: item.newRemainingQuantity,
           itemSaleStatus: item.newItemStatus,
         },
-      })
+      }),
     );
 
     // Execute all operations
-    console.log(`Executing ${stockOperations.length} stock operations...`);
     await Promise.all([...stockOperations, ...itemUpdatePromises]);
 
     // Get updated items
     const updatedItems = await Promise.all(itemUpdatePromises);
-    
+
     updatedItems.forEach((item, index) => {
       const processed = validatedItems[index];
-      console.log(`✅ Item ${processed.sellItem.id} processed successfully`);
-      console.log(`   Status: ${processed.newItemStatus}`);
-      console.log(`   Given: ${processed.totalGivenSoFar}, Remaining: ${processed.newRemainingQuantity}`);
     });
 
     // Recalculate overall sale status
@@ -1263,16 +1232,16 @@ const completeSaleDelivery = async (saleId, deliveryData, userId) => {
       newSaleStatus = 'DELIVERED';
     } else if (itemStatuses.every((status) => status === 'CANCELLED')) {
       newSaleStatus = 'CANCELLED';
-    } else if (itemStatuses.some((status) => status === 'DELIVERED') || 
-               itemStatuses.some((status) => status === 'PARTIALLY_DELIVERED')) {
+    } else if (
+      itemStatuses.some((status) => status === 'DELIVERED') ||
+      itemStatuses.some((status) => status === 'PARTIALLY_DELIVERED')
+    ) {
       newSaleStatus = 'PARTIALLY_DELIVERED';
     } else if (itemStatuses.every((status) => status === 'PENDING')) {
       newSaleStatus = 'NOT_APPROVED';
     } else {
       newSaleStatus = 'NOT_APPROVED';
     }
-
-    console.log(`New sale status: ${newSaleStatus}`);
 
     // Update the sale status
     const finalUpdatedSale = await tx.sell.update({
@@ -1298,10 +1267,6 @@ const completeSaleDelivery = async (saleId, deliveryData, userId) => {
       return total + item.pieceQuantity;
     }, 0);
 
-    console.log(`🎉 Sale ${sell.invoiceNo} delivery completed successfully!`);
-    console.log(`   Total pieces delivered: ${totalPiecesDelivered}`);
-    console.log(`   Items updated: ${updatedItems.length}`);
-
     // Create log entry
     await tx.log.create({
       data: {
@@ -1310,12 +1275,10 @@ const completeSaleDelivery = async (saleId, deliveryData, userId) => {
       },
     });
 
-    console.log('=== completeSaleDelivery END ===');
     return finalUpdatedSale;
   });
 };
 const deliverAllSaleItems = async (saleId, deliveryData, userId) => {
-  console.log('=== deliverAllSaleItems START ===');
 
   const sell = await getSellById(saleId);
 
@@ -1323,92 +1286,78 @@ const deliverAllSaleItems = async (saleId, deliveryData, userId) => {
     throw new ApiError(httpStatus.NOT_FOUND, 'Sale not found');
   }
 
-  // Log all items for debugging
-  console.log('All sale items:', sell.items.map(item => ({
-    id: item.id,
-    productName: item.product?.name,
-    status: item.itemSaleStatus,
-    quantity: item.quantity,
-    givenQuantity: item.givenQuantity || 0,
-    remainingQuantity: item.remainingQuantity,
-    isBox: item.isBox
-  })));
-
   // Get all items that can be delivered - with proper remaining quantity calculation
   const deliverableItems = sell.items.filter((item) => {
     // Check if status allows delivery
-    const isEligibleStatus = item.itemSaleStatus === 'PENDING' || 
-                             item.itemSaleStatus === 'PARTIALLY_DELIVERED';
-    
+    const isEligibleStatus =
+      item.itemSaleStatus === 'PENDING' ||
+      item.itemSaleStatus === 'PARTIALLY_DELIVERED';
+
     if (!isEligibleStatus) return false;
-    
+
     // Calculate actual remaining quantity
     let actualRemaining = 0;
-    
+
     // If remainingQuantity is set and > 0, use it
-    if (item.remainingQuantity !== null && 
-        item.remainingQuantity !== undefined && 
-        item.remainingQuantity > 0) {
+    if (
+      item.remainingQuantity !== null &&
+      item.remainingQuantity !== undefined &&
+      item.remainingQuantity > 0
+    ) {
       actualRemaining = item.remainingQuantity;
-    } 
+    }
     // If remainingQuantity is 0 but givenQuantity is less than quantity, it's incorrect
-    else if (item.remainingQuantity === 0 && (item.givenQuantity || 0) < item.quantity) {
+    else if (
+      item.remainingQuantity === 0 &&
+      (item.givenQuantity || 0) < item.quantity
+    ) {
       // Calculate correct remaining quantity
       actualRemaining = item.quantity - (item.givenQuantity || 0);
-      console.log(`⚠️ Item ${item.id} has remainingQuantity=0 but givenQuantity=${item.givenQuantity || 0} < quantity=${item.quantity}. Correcting to ${actualRemaining}`);
+      
     }
     // If remainingQuantity is null/undefined, calculate from quantity and givenQuantity
-    else if (item.remainingQuantity === null || item.remainingQuantity === undefined) {
+    else if (
+      item.remainingQuantity === null ||
+      item.remainingQuantity === undefined
+    ) {
       actualRemaining = item.quantity - (item.givenQuantity || 0);
-      console.log(`⚠️ Item ${item.id} has no remainingQuantity. Calculating as ${actualRemaining}`);
     }
-    
+
     return actualRemaining > 0;
   });
 
-  console.log('Deliverable items count:', deliverableItems.length);
-  console.log('Deliverable items details:', deliverableItems.map(item => {
-    const remaining = item.remainingQuantity !== null && item.remainingQuantity !== undefined && item.remainingQuantity > 0
-      ? item.remainingQuantity
-      : item.quantity - (item.givenQuantity || 0);
-    
-    return {
-      id: item.id,
-      productName: item.product?.name,
-      status: item.itemSaleStatus,
-      quantity: item.quantity,
-      givenQuantity: item.givenQuantity || 0,
-      remainingQuantity: item.remainingQuantity,
-      calculatedRemaining: remaining
-    };
-  }));
-
   if (deliverableItems.length === 0) {
     // Check if there are any non-delivered items
-    const nonDeliveredItems = sell.items.filter(item => 
-      item.itemSaleStatus !== 'DELIVERED' && item.itemSaleStatus !== 'CANCELLED'
+    const nonDeliveredItems = sell.items.filter(
+      (item) =>
+        item.itemSaleStatus !== 'DELIVERED' &&
+        item.itemSaleStatus !== 'CANCELLED',
     );
-    
+
     if (nonDeliveredItems.length === 0) {
       throw new ApiError(
         httpStatus.BAD_REQUEST,
         'No items available for delivery. All items are already delivered or cancelled.',
       );
     }
-    
+
     // Calculate if items have quantity remaining
-    const itemsWithRemaining = nonDeliveredItems.filter(item => {
+    const itemsWithRemaining = nonDeliveredItems.filter((item) => {
       const remaining = item.quantity - (item.givenQuantity || 0);
       return remaining > 0;
     });
-    
+
     if (itemsWithRemaining.length > 0) {
       throw new ApiError(
         httpStatus.BAD_REQUEST,
-        `Found ${itemsWithRemaining.length} item(s) with remaining quantity, but they have status ${itemsWithRemaining.map(i => i.itemSaleStatus).join(', ')}. Please check item statuses.`,
+        `Found ${
+          itemsWithRemaining.length
+        } item(s) with remaining quantity, but they have status ${itemsWithRemaining
+          .map((i) => i.itemSaleStatus)
+          .join(', ')}. Please check item statuses.`,
       );
     }
-    
+
     throw new ApiError(
       httpStatus.BAD_REQUEST,
       'No deliverable items found in this sale. All items have zero remaining quantity.',
@@ -1420,7 +1369,7 @@ const deliverAllSaleItems = async (saleId, deliveryData, userId) => {
     deliveryData.items = deliverableItems.map((item) => {
       // Calculate the correct remaining quantity
       let remainingQty = item.remainingQuantity;
-      
+
       // If remainingQuantity is 0 but givenQuantity is less than quantity, correct it
       if (remainingQty === 0 && (item.givenQuantity || 0) < item.quantity) {
         remainingQty = item.quantity - (item.givenQuantity || 0);
@@ -1429,7 +1378,7 @@ const deliverAllSaleItems = async (saleId, deliveryData, userId) => {
       else if (remainingQty === null || remainingQty === undefined) {
         remainingQty = item.quantity - (item.givenQuantity || 0);
       }
-      
+
       return {
         itemId: item.id,
         givenQuantity: remainingQty, // Deliver the remaining quantity
@@ -1438,14 +1387,11 @@ const deliverAllSaleItems = async (saleId, deliveryData, userId) => {
     console.log('Auto-generated delivery items:', deliveryData.items);
   }
 
-  console.log('=== deliverAllSaleItems END ===');
   return completeSaleDelivery(saleId, deliveryData, userId);
 };
 
 const partialSaleDelivery = async (saleId, deliveryData, userId) => {
-  console.log('=== partialSaleDelivery START ===');
-  console.log('Partial delivery for sale:', saleId);
-  console.log('=== partialSaleDelivery END ===');
+
   return completeSaleDelivery(saleId, deliveryData, userId);
 };
 
@@ -1588,9 +1534,7 @@ const updateSaleStatus = async (saleId, newStatus, userId) => {
       usersWithShopAccess.forEach((user) => {
         // Send to each user individually - remove 'user:' prefix
         io.to(user.id).emit('new-notification', realTimeNotification);
-        console.log(
-          `✅ Sent real-time notification to user ${user.name} (${user.id})`,
-        );
+      
 
         // Also send to user's shops for additional targeting
         user.shops.forEach((shop) => {
@@ -1607,11 +1551,7 @@ const updateSaleStatus = async (saleId, newStatus, userId) => {
         (result) => result.status === 'fulfilled',
       ).length;
 
-      console.log(
-        `📢 Successfully processed ${newStatus.toLowerCase()} notifications for ${successfulShopCount} shops and ${
-          usersWithShopAccess.length
-        } users for sale #${updatedSale.invoiceNo}`,
-      );
+     
     } catch (notificationError) {
       console.error(
         `❌ Unexpected error in ${newStatus.toLowerCase()} notification process:`,
@@ -1788,9 +1728,7 @@ const cancelSale = async (saleId, userId) => {
       (result) => result.status === 'fulfilled',
     ).length;
 
-    console.log(
-      `📢 Successfully processed cancellation notifications for ${successfulShopCount} shops and ${usersWithShopAccess.length} users for sale #${updatedSale.invoiceNo}`,
-    );
+ 
   } catch (notificationError) {
     console.error(
       '❌ Unexpected error in cancellation notification process:',
@@ -3314,19 +3252,11 @@ const addSellPayment = async (sellId, paymentData, userId) => {
         },
       });
 
-      console.log('Sell updated successfully');
       return { payment, sell: updatedSell };
     });
 
-    console.log('Transaction completed successfully:', {
-      paymentId: result.payment.id,
-      amount: result.payment.amount,
-      newTotalPaid: result.sell.totalPaid,
-      newBalance: result.sell.balance,
-      paymentStatus: result.sell.paymentStatus,
-    });
+  
 
-    console.log('=== addSellPayment END ===');
     return result;
   } catch (error) {
     console.error('=== addSellPayment ERROR ===');

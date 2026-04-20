@@ -238,9 +238,7 @@ const generateSalesReports = async ({
   limit = 10,
   slowMoveThreshold = 10,
 } = {}) => {
-  console.log('=== generateSalesReports START ===');
-  console.log('Parameters:', { startDate, endDate, shopId, branchId, limit, slowMoveThreshold });
-
+  
   // Default date range: last 12 months
   const twelveMonthsAgo = subMonths(new Date(), 12);
 
@@ -290,7 +288,6 @@ const generateSalesReports = async ({
       },
     });
 
-    console.log('Products with sales found:', allProductsSales.length);
 
     if (allProductsSales.length === 0) {
       return {
@@ -380,7 +377,6 @@ const generateSalesReports = async ({
         },
       });
 
-      console.log(`Enriched ${products.length} products for reporting`);
 
       return productGroups.map((item) => {
         const product = products.find((p) => p.id === item.productId);
@@ -467,8 +463,6 @@ const generateSalesReports = async ({
       .sort((a, b) => b.valueScore - a.valueScore)
       .slice(0, limit);
 
-    console.log('Reports generated successfully');
-    console.log('=== generateSalesReports END ===');
 
     return {
       reportPeriod: {
@@ -1126,7 +1120,6 @@ const getSalesCreatorDashboardSummary = async (userId) => {
       recentApprovedSales: formattedRecentSales,
     };
 
-    console.log('Sales Creator Dashboard Summary:', result);
     return result;
   } catch (error) {
     console.error('Sales creator dashboard error:', error);

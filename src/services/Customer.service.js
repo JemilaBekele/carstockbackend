@@ -335,9 +335,6 @@ const deleteSupplier = async (id) => {
 };
 
 const getCustomerSells = async (customerId, filters = {}) => {
-  console.log('=== getCustomerSells START ===');
-  console.log('Customer ID:', customerId);
-
   // Validate customer exists
   const customer = await prisma.customer.findUnique({
     where: { id: customerId },
@@ -591,7 +588,6 @@ const getCustomerSells = async (customerId, filters = {}) => {
     },
   });
 
-  console.log('=== getCustomerSells END ===');
 
   return {
     customer: {
@@ -707,7 +703,6 @@ const getCustomerSells = async (customerId, filters = {}) => {
  * Get customer payment summary only
  */
 const getCustomerPaymentSummary = async (customerId) => {
-  console.log('=== getCustomerPaymentSummary START ===');
 
   const customer = await prisma.customer.findUnique({
     where: { id: customerId },
@@ -748,7 +743,6 @@ const getCustomerPaymentSummary = async (customerId) => {
     },
   });
 
-  console.log('=== getCustomerPaymentSummary END ===');
 
   return {
     customer: {
@@ -780,8 +774,6 @@ const getCustomerPaymentSummary = async (customerId) => {
   };
 };
 const getSupplierPurchases = async (supplierId, filters = {}) => {
-  console.log('=== getSupplierPurchases START ===');
-  console.log('Supplier ID:', supplierId);
 
   // Validate supplier exists
   const supplier = await prisma.supplier.findUnique({
@@ -995,7 +987,6 @@ const getSupplierPurchases = async (supplierId, filters = {}) => {
     },
   });
 
-  console.log('=== getSupplierPurchases END ===');
 
   return {
     supplier: {
