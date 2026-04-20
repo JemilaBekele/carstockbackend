@@ -95,4 +95,26 @@ router.delete(
   customerSupplierController.deleteSupplier,
 );
 
+/**
+ * Get all sells for a specific customer
+ */
+router.get(
+  '/api/customers/:customerId/sells',
+  auth,
+  customerSupplierController.getCustomerSells,
+);
+
+/**
+ * Get payment summary for a specific customer
+ */
+router.get(
+  '/api/customers/:customerId/payment-summary',
+  auth,
+  customerSupplierController.getCustomerPaymentSummary,
+);
+router.get(
+  '/api/suppliers/:supplierId/purchases',
+  auth,
+  customerSupplierController.getSupplierPurchases,
+);
 module.exports = router;

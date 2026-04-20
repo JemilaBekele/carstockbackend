@@ -561,6 +561,7 @@ const createProduct = async (productBody, files) => {
                 ? parseFloat(price.price)
                 : price.price,
             shopId: price.shopId || null,
+            isBox: price.isBox === 'true' || price.isBox === true || false, // Handle isBox field
           };
           console.log(`Additional price ${index + 1}:`, priceData);
           return priceData;
@@ -752,6 +753,7 @@ const updateProduct = async (id, updateBody, files) => {
             label: price.label,
             price: parseFloat(price.price),
             shopId: price.shopId || null,
+            isBox: price.isBox === 'true' || price.isBox === true || false, // Handle isBox field
           };
           console.log(`Additional price ${index + 1}:`, priceData);
           return priceData;
@@ -1626,7 +1628,7 @@ const getProductByShops = async (productId) => {
             id: ap.id,
             label: ap.label,
             price: ap.price,
-            isGlobal: ap.shopId === null,
+            isBox: ap.isBox,
           })),
           totalPrice,
           UnitOfMeasure: stock.product.UnitOfMeasure,

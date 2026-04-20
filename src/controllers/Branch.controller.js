@@ -12,7 +12,31 @@ const createBranch = catchAsync(async (req, res) => {
     branch,
   });
 });
+const createProductStock = catchAsync(async (req, res) => {
+  const userId = req.user?.id; // Assuming user is attached to request (e.g., from auth middleware)
+  const { productId } = req.params;
+  // Validate required fields
+  if (!productId) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Product ID is required');
+  }
 
+  // Call the service
+  const results = await branchService.createProductStock(
+    productId,
+    req.body,
+    userId,
+  );
+
+  // Send response
+  res.status(httpStatus.CREATED).send({
+    success: true,
+    message:
+      results.length === 1
+        ? 'Stock created successfully'
+        : `${results.length} stock entries created successfully`,
+    data: results,
+  });
+});
 // Get Branch by ID
 const getBranch = catchAsync(async (req, res) => {
   const branch = await branchService.getBranchById(req.params.id);
@@ -67,6 +91,7 @@ const getAllProducts = catchAsync(async (req, res) => {
 });
 module.exports = {
   createBranch,
+  createProductStock,
   getBranch,
   getBranches,
   updateBranch,

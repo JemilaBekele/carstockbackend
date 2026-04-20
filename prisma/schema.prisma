@@ -47,6 +47,7 @@ Sell Sell[] @relation("CreatedSale")
 UpdateSell Sell[] @relation("UpdatedSale")
 SellStockCorrection SellStockCorrection[] @relation("createdSellStockCorrection")
 UpdateSellStockCorrection SellStockCorrection[] @relation("updatedSellStockCorrection")
+sellPayments SellPayment[]
 }
 
 model Role {
@@ -378,6 +379,8 @@ model AdditionalPrice {
 
   shopId      String?        @db.Char(36)
   shop        Shop?          @relation(fields: [shopId], references: [id])
+  isBox        Boolean @default(false)
+
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
@@ -395,7 +398,9 @@ model AdditionalPrice {
 
 model Purchase {
   id             String           @id @default(uuid()) @map("_id") @db.Char(36)
-  invoiceNo      String           @unique                      // Invoice number
+  invoiceNo      String           @unique  
+  imageUrl       String?
+  documentUrl    String?                    // Invoice number
   supplierId     String           @db.Char(36)
   supplier       Supplier         @relation(fields: [supplierId], references: [id])
   storeId        String?           @db.Char(36)
@@ -616,9 +621,34 @@ enum SaleStatus {
   CANCELLED
 }
 
+enum SellPaymentStatus {
+  PENDING
+  PARTIAL
+  PAID
+  CANCELLED
+}
+model SellPayment {
+  id             String             @id @default(uuid()) @map("_id") @db.Char(36)
+
+  sellId         String             @db.Char(36)
+  sell           Sell               @relation(fields: [sellId], references: [id])
+
+  amount         Float
+  createdById   String?            @db.Char(36)
+  createdBy     User?              @relation(fields: [createdById], references: [id])
+
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@map("sell_payments")
+}
 model Sell {
   id             String          @id @default(uuid()) @map("_id") @db.Char(36)
   invoiceNo      String          @unique
+    paymentStatus  SellPaymentStatus    @default(PENDING)               // Paid, Pending, Partial, Unpaid
+  grandTotal     Float           @default(0)
+  balance        Int             @default(0)
+  totalPaid      Int             @default(0)
   imageUrl       String?
   documentUrl    String?
 
@@ -635,11 +665,12 @@ model Sell {
   subTotal       Float           @default(0)
   discount       Float           @default(0)
   vat            Float           @default(0)
-  grandTotal     Float           @default(0)
-  NetTotal       Float           @default(0)
 
   notes          String?
   saleDate       DateTime        @default(now())
+
+
+  NetTotal       Float           @default(0)
 
   createdById    String?         @db.Char(36)
   createdBy      User?           @relation("CreatedSale", fields: [createdById], references: [id])
@@ -653,6 +684,7 @@ model Sell {
 
   @@map("sells")
   SellStockCorrection SellStockCorrection[]
+  sellPayments SellPayment[]
 }
 
 model SellItem {
@@ -667,11 +699,15 @@ model SellItem {
   shop             Shop            @relation(fields: [shopId], references: [id])
 
   itemSaleStatus   ItemSaleStatus  @default(PENDING)
+    givenQuantity         Int?   @default(0)
+remainingQuantity Int?  @default(0)
   // ✅ Box or Piece
   isBox       Boolean     @default(false)
 
 
   quantity         Int
+
+
   unitPrice        Float           @default(0)
   totalPrice       Float           @default(0)
 
@@ -699,6 +735,7 @@ enum ItemSaleStatus {
   PENDING
   DELIVERED
   REJECTED
+  PARTIALLY_DELIVERED
 }
 model SellStockCorrection {
   id          String                     @id @default(uuid()) @map("_id") @db.Char(36)

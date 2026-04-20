@@ -832,6 +832,122 @@ const acceptPurchase = async (purchaseId, paymentStatus, userId) => {
     );
   }
 };
+// services/purchase.service.js or similar
+
+const addPurchaseFiles = async (purchaseId, userId, structuredFiles = {}) => {
+  // Validate userId
+  if (!userId) {
+    throw new ApiError(httpStatus.UNAUTHORIZED, 'User ID is required');
+  }
+
+  // Check if purchase exists
+  const existingPurchase = await prisma.purchase.findUnique({
+    where: { id: purchaseId },
+    select: {
+      id: true,
+      invoiceNo: true,
+      imageUrl: true,
+      documentUrl: true,
+    },
+  });
+
+  if (!existingPurchase) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Purchase not found');
+  }
+
+  try {
+    let { imageUrl } = existingPurchase;
+    let { documentUrl } = existingPurchase;
+
+    // Handle image upload from structuredFiles
+    if (structuredFiles.image && structuredFiles.image.length > 0) {
+      const imageFile = structuredFiles.image[0];
+      let fileUrl = imageFile.path;
+
+      // Convert Windows path to URL format
+      fileUrl = fileUrl.replace(/\\/g, '/');
+      // Extract the path after 'uploads'
+      const uploadsIndex = fileUrl.indexOf('/uploads/');
+      if (uploadsIndex !== -1) {
+        fileUrl = fileUrl.substring(uploadsIndex);
+      } else {
+        // If no 'uploads' in path, just use the filename
+        fileUrl = `/uploads/purchase/images/${imageFile.filename}`;
+      }
+
+      imageUrl = fileUrl;
+    }
+
+    // Handle document upload from structuredFiles
+    if (structuredFiles.document && structuredFiles.document.length > 0) {
+      const documentFile = structuredFiles.document[0];
+      let fileUrl = documentFile.path;
+
+      // Convert Windows path to URL format
+      fileUrl = fileUrl.replace(/\\/g, '/');
+      // Extract the path after 'uploads'
+      const uploadsIndex = fileUrl.indexOf('/uploads/');
+      if (uploadsIndex !== -1) {
+        fileUrl = fileUrl.substring(uploadsIndex);
+      } else {
+        // If no 'uploads' in path, just use the filename
+        fileUrl = `/uploads/purchase/documents/${documentFile.filename}`;
+      }
+
+      documentUrl = fileUrl;
+    }
+
+    // Update purchase record with both files
+    const updatedPurchase = await prisma.$transaction(async (prismaTx) => {
+      const purchase = await prismaTx.purchase.update({
+        where: { id: purchaseId },
+        data: {
+          imageUrl,
+          documentUrl,
+        },
+      });
+
+      // Create log entry
+      const addedFiles = [];
+      if (structuredFiles.image && structuredFiles.image.length > 0)
+        addedFiles.push('image');
+      if (structuredFiles.document && structuredFiles.document.length > 0)
+        addedFiles.push('document');
+
+      if (addedFiles.length > 0) {
+        await prismaTx.log.create({
+          data: {
+            action: `Added/Updated ${addedFiles.join(' and ')} for purchase ${
+              existingPurchase.invoiceNo
+            }`,
+            userId,
+          },
+        });
+      }
+
+      return purchase;
+    });
+
+    return {
+      success: true,
+      message: `${structuredFiles.image ? 'Image' : ''}${
+        structuredFiles.image && structuredFiles.document ? ' and ' : ''
+      }${
+        structuredFiles.document ? 'Document' : ''
+      } added/updated successfully`,
+      data: updatedPurchase,
+    };
+  } catch (error) {
+    if (error.code) {
+      console.error('Prisma error code:', error.code);
+    }
+
+    throw new ApiError(
+      httpStatus.INTERNAL_SERVER_ERROR,
+      `Failed to add files to purchase: ${error.message}`,
+    );
+  }
+};
 module.exports = {
   getPurchaseById,
   getPurchaseByInvoiceNo,
@@ -840,4 +956,5 @@ module.exports = {
   updatePurchase,
   deletePurchase,
   acceptPurchase,
+  addPurchaseFiles,
 };
