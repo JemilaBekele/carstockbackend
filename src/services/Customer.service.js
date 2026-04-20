@@ -588,7 +588,6 @@ const getCustomerSells = async (customerId, filters = {}) => {
     },
   });
 
-
   return {
     customer: {
       id: customer.id,
@@ -703,7 +702,6 @@ const getCustomerSells = async (customerId, filters = {}) => {
  * Get customer payment summary only
  */
 const getCustomerPaymentSummary = async (customerId) => {
-
   const customer = await prisma.customer.findUnique({
     where: { id: customerId },
     select: { id: true, name: true, phone1: true },
@@ -743,7 +741,6 @@ const getCustomerPaymentSummary = async (customerId) => {
     },
   });
 
-
   return {
     customer: {
       id: customer.id,
@@ -774,7 +771,6 @@ const getCustomerPaymentSummary = async (customerId) => {
   };
 };
 const getSupplierPurchases = async (supplierId, filters = {}) => {
-
   // Validate supplier exists
   const supplier = await prisma.supplier.findUnique({
     where: { id: supplierId },
@@ -986,7 +982,6 @@ const getSupplierPurchases = async (supplierId, filters = {}) => {
       paymentStatus: true,
     },
   });
-
 
   return {
     supplier: {

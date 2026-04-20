@@ -87,14 +87,14 @@ module.exports = async (app) => {
   if (env === 'production') {
     app.use(
       cors({
-        origin: ['http://localhost:3000'],
+        origin: ['https://store.smartdent.online', 'http://localhost:3020'],
         credentials: true,
       }),
     );
     app.options(
       '*',
       cors({
-        origin: ['http://localhost:3000'],
+        origin: ['https://store.smartdent.online/', 'http://localhost:3020'],
         credentials: true,
       }),
     );
