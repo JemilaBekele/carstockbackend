@@ -285,10 +285,12 @@ const refreshAuthToken = async (refreshToken) => {
     return newTokens;
   } catch (error) {
     // Catch any errors from jwt.verify, user lookup, or token generation
-    throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid or expired refresh token');
+    throw new ApiError(
+      httpStatus.BAD_REQUEST,
+      'Invalid or expired refresh token',
+    );
   }
 };
-
 module.exports = {
   login,
   refreshAuthToken,
