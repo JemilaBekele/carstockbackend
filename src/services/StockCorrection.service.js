@@ -20,9 +20,13 @@ const getStockCorrectionById = async (id) => {
         transfer: true,
         createdBy: true,
         updatedBy: true,
-        items: {
+            items: {
           include: {
-            product: true,
+            product: {
+              include: {
+                unitOfMeasure: true, 
+              },
+            },
           },
         },
       },
@@ -293,7 +297,6 @@ const updateStockCorrection = async (
   stockCorrectionBody,
   userId,
 ) => {
- 
   try {
     // Check if stock correction exists
     const existingStockCorrection = await getStockCorrectionById(
@@ -303,8 +306,6 @@ const updateStockCorrection = async (
     if (!existingStockCorrection) {
       throw new ApiError(httpStatus.NOT_FOUND, 'Stock correction not found');
     }
-
-  
 
     // Cannot update approved or rejected stock corrections
     if (existingStockCorrection.status !== 'PENDING') {
@@ -344,7 +345,6 @@ const updateStockCorrection = async (
 
     // Validate individual item properties
     items.forEach((item, index) => {
-
       if (!item.productId) {
         throw new ApiError(
           httpStatus.BAD_REQUEST,
@@ -417,7 +417,6 @@ const updateStockCorrection = async (
       );
     }
 
-
     // Update the stock correction inside a transaction
     const result = await prisma.$transaction(async (tx) => {
       // Delete all existing items
@@ -452,14 +451,11 @@ const updateStockCorrection = async (
         },
       });
 
-    
       return stockCorrection;
     });
 
     return result;
   } catch (error) {
-   
-
     if (error instanceof ApiError) {
       throw error;
     }
@@ -672,7 +668,6 @@ const deleteStockCorrection = async (id, userId) => {
 
 // Approve StockCorrection
 const approveStockCorrection = async (stockCorrectionId, userId) => {
-
   // Fetch stock correction with product details
   const stockCorrection = await prisma.stockCorrection.findUnique({
     where: { id: stockCorrectionId },
@@ -695,8 +690,6 @@ const approveStockCorrection = async (stockCorrectionId, userId) => {
     },
   });
 
-
-
   if (!stockCorrection) {
     console.error('Stock correction not found');
     throw new ApiError(httpStatus.NOT_FOUND, 'Stock correction not found');
@@ -714,7 +707,6 @@ const approveStockCorrection = async (stockCorrectionId, userId) => {
   }
 
   const result = await prisma.$transaction(async (tx) => {
-
     // Get all product details for better error messages
     const productIds = stockCorrection.items.map((item) => item.productId);
     const products = await tx.product.findMany({
@@ -736,7 +728,6 @@ const approveStockCorrection = async (stockCorrectionId, userId) => {
     // Check for negative stock BEFORE processing
     const insufficientStockItems = [];
 
-
     // For each item, check if there's enough stock for subtractions
     for (const item of stockCorrection.items) {
       const product = productMap[item.productId];
@@ -744,8 +735,6 @@ const approveStockCorrection = async (stockCorrectionId, userId) => {
       const productCode = product?.productCode
         ? ` (${product.productCode})`
         : '';
-
-  
 
       // Calculate piece quantity based on isBox flag
       let pieceQuantity = item.quantity;
@@ -767,8 +756,6 @@ const approveStockCorrection = async (stockCorrectionId, userId) => {
         }
 
         pieceQuantity = item.quantity * product.boxSize;
-
-    
       } else {
         pieceQuantity = item.quantity;
         console.log(`📦 Product: ${product.name}`);
@@ -779,10 +766,8 @@ const approveStockCorrection = async (stockCorrectionId, userId) => {
       // Only need to check for negative quantities (subtractions)
       if (pieceQuantity < 0) {
         const absoluteQuantity = Math.abs(pieceQuantity);
-      
-        if (stockCorrection.storeId) {
-        
 
+        if (stockCorrection.storeId) {
           const storeStock = await tx.storeStock.findFirst({
             where: {
               storeId: stockCorrection.storeId,
@@ -790,9 +775,7 @@ const approveStockCorrection = async (stockCorrectionId, userId) => {
             },
           });
 
-
           const currentStock = storeStock?.quantity || 0;
-         
 
           if (currentStock < absoluteQuantity) {
             console.error(`Insufficient store stock for "${productName}"!`);
@@ -808,7 +791,6 @@ const approveStockCorrection = async (stockCorrectionId, userId) => {
             });
           }
         } else if (stockCorrection.shopId) {
-
           const shopStock = await tx.shopStock.findFirst({
             where: {
               shopId: stockCorrection.shopId,
@@ -816,9 +798,7 @@ const approveStockCorrection = async (stockCorrectionId, userId) => {
             },
           });
 
-
           const currentStock = shopStock?.quantity || 0;
-        
 
           if (currentStock < absoluteQuantity) {
             console.error(`Insufficient shop stock for "${productName}"!`);
@@ -867,7 +847,6 @@ const approveStockCorrection = async (stockCorrectionId, userId) => {
       throw new ApiError(httpStatus.BAD_REQUEST, errorMessage);
     }
 
-
     // Prepare all operations for each stock correction item
     const stockOperations = [];
     const stockLedgerOperations = [];
@@ -877,14 +856,11 @@ const approveStockCorrection = async (stockCorrectionId, userId) => {
       const product = productMap[item.productId];
       const productName = product?.name || `Product ID: ${item.productId}`;
 
-   
-
       // Calculate piece quantity based on isBox flag
       let pieceQuantity = item.quantity;
 
       if (item.isBox) {
         pieceQuantity = item.quantity * product.boxSize;
-     
       } else {
         pieceQuantity = item.quantity;
         console.log(`Processing ${item.quantity} piece(s)`);
@@ -897,12 +873,8 @@ const approveStockCorrection = async (stockCorrectionId, userId) => {
         ? `Stock addition for "${productName}": ${stockCorrection.reason.toLowerCase()}`
         : `Stock subtraction for "${productName}": ${stockCorrection.reason.toLowerCase()}`;
 
-    
-
       // Update stock based on location (store or shop)
       if (stockCorrection.storeId) {
-      
-
         stockOperations.push(
           tx.storeStock.upsert({
             where: {
@@ -925,8 +897,6 @@ const approveStockCorrection = async (stockCorrectionId, userId) => {
           }),
         );
       } else if (stockCorrection.shopId) {
-      
-
         stockOperations.push(
           tx.shopStock.upsert({
             where: {
@@ -952,8 +922,6 @@ const approveStockCorrection = async (stockCorrectionId, userId) => {
 
       // Create stock ledger entry
       if (stockCorrection.storeId) {
-       
-
         const now = new Date();
         const timestamp = now.getTime();
         const dateStr = now.toISOString().replace(/[-:]/g, '').split('.')[0];

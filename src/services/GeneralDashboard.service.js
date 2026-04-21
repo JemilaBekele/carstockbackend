@@ -321,7 +321,6 @@ const predictNextTopProduct = async (monthlyData) => {
       });
     });
 
-
     if (productPerformance.size === 0) {
       return {
         topPredictedProduct: null,
@@ -412,7 +411,6 @@ const predictNextTopProduct = async (monthlyData) => {
       })
       .filter(Boolean);
 
-
     if (predictions.length === 0) {
       return {
         topPredictedProduct: null,
@@ -479,7 +477,6 @@ const getProductStockStatus = async (productId) => {
       0,
     );
     const totalStock = totalStoreStock + totalShopStock;
-
 
     const warningQuantity = product.warningQuantity || 10;
 
@@ -614,7 +611,6 @@ const generateRecommendations = (prediction, stockStatus) => {
 };
 const getTopProductsReportWithPrediction = async () => {
   try {
-
     // Calculate date range for past 7 months
     const endDate = new Date();
     const startDate = new Date();
@@ -622,9 +618,6 @@ const getTopProductsReportWithPrediction = async () => {
     startDate.setDate(1);
     startDate.setHours(0, 0, 0, 0);
     endDate.setHours(23, 59, 59, 999);
-
-
-   
 
     // Get all sales in the date range (not just APPROVED)
     // Include DELIVERED, APPROVED, and PARTIALLY_DELIVERED
@@ -655,8 +648,6 @@ const getTopProductsReportWithPrediction = async () => {
       },
     });
 
- 
-
     // If no sales found, try to get all sales without date filter to debug
     if (sales.length === 0) {
       const allSales = await prisma.sell.findMany({
@@ -665,12 +656,10 @@ const getTopProductsReportWithPrediction = async () => {
           items: true,
         },
       });
-    
     }
 
     // If still no sales, return empty report with helpful message
     if (sales.length === 0) {
-
       return {
         period: {
           startDate,
@@ -732,7 +721,6 @@ const getTopProductsReportWithPrediction = async () => {
       return acc;
     }, new Map());
 
-  
     // Prepare monthly reports with top 50 by revenue and quantity
     const monthlyReports = [];
     let totalRevenueAllMonths = 0;
@@ -742,7 +730,6 @@ const getTopProductsReportWithPrediction = async () => {
     monthlyData.forEach((productMap, monthKey) => {
       const [year, month] = monthKey.split('-');
       const products = Array.from(productMap.values());
-
 
       // Update totals
       products.forEach((product) => {
@@ -779,8 +766,6 @@ const getTopProductsReportWithPrediction = async () => {
       return dateA - dateB;
     });
 
-  
-
     // Predict next month's top product (only if we have data)
     let prediction = {
       topPredictedProduct: null,
@@ -789,13 +774,11 @@ const getTopProductsReportWithPrediction = async () => {
 
     if (monthlyData.size > 0) {
       prediction = await predictNextTopProduct(monthlyData);
-     
     }
 
     // Get stock status for predicted product (only if we have a prediction)
     let stockStatus = null;
     if (prediction.topPredictedProduct) {
-     
       stockStatus = await getProductStockStatus(
         prediction.topPredictedProduct.productId,
       );
@@ -810,7 +793,6 @@ const getTopProductsReportWithPrediction = async () => {
         'Not enough sales data to generate predictions. Continue recording sales to enable predictive analytics.',
       ];
     }
-
 
     return {
       period: {
@@ -833,15 +815,12 @@ const getTopProductsReportWithPrediction = async () => {
       },
     };
   } catch (error) {
- 
     throw new ApiError(
       httpStatus.INTERNAL_SERVER_ERROR,
       `Error generating top products report: ${error.message}`,
     );
   }
 };
-
-
 
 module.exports = {
   getAllTotalsWithItems,

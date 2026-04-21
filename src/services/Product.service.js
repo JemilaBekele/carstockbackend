@@ -11,6 +11,8 @@ const getProductById = async (id) => {
     include: {
       category: true,
       brand: true,
+      unitOfMeasure: true,
+
       AdditionalPrice: {
         include: {
           shop: {
@@ -433,13 +435,9 @@ const parseFormData = (data) => {
 
 const createProduct = async (productBody, files) => {
   try {
-   
-
     // Generate product code if not provided
     let { productCode } = productBody;
     const { name } = productBody;
-
-
 
     if (!productCode || productCode.trim() === '') {
       productCode = await generateUniqueProductCode();
@@ -458,7 +456,6 @@ const createProduct = async (productBody, files) => {
     }
 
     const parsedData = parseFormData(productBody);
- 
 
     // Convert string boolean values to actual booleans
     if (parsedData.hasBox !== undefined) {
@@ -488,6 +485,15 @@ const createProduct = async (productBody, files) => {
       parsedData.sellPrice = parseFloat(parsedData.sellPrice);
     }
 
+    // Convert numberunitOfMeasure to integer
+    if (
+      parsedData.numberunitOfMeasure !== undefined &&
+      parsedData.numberunitOfMeasure !== null &&
+      parsedData.numberunitOfMeasure !== ''
+    ) {
+      parsedData.numberunitOfMeasure = parseInt(parsedData.numberunitOfMeasure);
+    }
+
     parsedData.productCode = productCode;
 
     let imageUrl = '';
@@ -498,7 +504,6 @@ const createProduct = async (productBody, files) => {
       : files?.image;
 
     if (imageFile) {
-   
       try {
         imageUrl = await uploadImage(imageFile, 'product_images');
       } catch (err) {
@@ -512,7 +517,11 @@ const createProduct = async (productBody, files) => {
     }
 
     const { additionalPrices, ...productData } = parsedData;
- 
+
+    // Validate required fields
+    if (!productData.unitOfMeasureId) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Unit of measure is required');
+    }
 
     // Prepare additional prices data
     let additionalPricesData;
@@ -526,7 +535,7 @@ const createProduct = async (productBody, files) => {
                 ? parseFloat(price.price)
                 : price.price,
             shopId: price.shopId || null,
-            isBox: price.isBox === 'true' || price.isBox === true || false, // Handle isBox field
+            isBox: price.isBox === 'true' || price.isBox === true || false,
           };
           return priceData;
         }),
@@ -543,15 +552,13 @@ const createProduct = async (productBody, files) => {
       include: {
         category: true,
         brand: true,
+        unitOfMeasure: true,
         AdditionalPrice: true,
       },
     });
 
-  
     return product;
   } catch (error) {
-  
-
     // Log Prisma-specific error details
     if (error.code) {
       console.error('Prisma error code:', error.code);
@@ -579,8 +586,6 @@ const createProduct = async (productBody, files) => {
 };
 
 const updateProduct = async (id, updateBody, files) => {
-
-
   try {
     const existingProduct = await getProductById(id);
 
@@ -593,7 +598,6 @@ const updateProduct = async (id, updateBody, files) => {
       updateBody.productCode &&
       updateBody.productCode !== existingProduct.productCode
     ) {
-    
       const existingProductByCode = await getProductByCode(
         updateBody.productCode,
       );
@@ -615,7 +619,6 @@ const updateProduct = async (id, updateBody, files) => {
       : files?.image;
 
     if (imageFile) {
-   
       try {
         imageUrl = await uploadImage(imageFile, 'product_images');
       } catch (err) {
@@ -629,7 +632,7 @@ const updateProduct = async (id, updateBody, files) => {
     }
 
     const { additionalPrices, ...productData } = parsedData;
-  
+
     // Prepare the update data
     const updateData = {
       ...productData,
@@ -655,24 +658,32 @@ const updateProduct = async (id, updateBody, files) => {
       updateData.boxSize = parseInt(productData.boxSize);
     }
 
+    // Handle numberunitOfMeasure conversion
+    if (
+      productData.numberunitOfMeasure !== undefined &&
+      productData.numberunitOfMeasure !== null &&
+      productData.numberunitOfMeasure !== ''
+    ) {
+      updateData.numberunitOfMeasure = parseInt(
+        productData.numberunitOfMeasure,
+      );
+    }
 
     // Handle additional prices update
     if (additionalPrices !== undefined) {
-
       // First, delete existing additional prices for this product
-      const deleteResult = await prisma.additionalPrice.deleteMany({
+      await prisma.additionalPrice.deleteMany({
         where: { productId: id },
       });
 
       // Then create new ones if provided
       if (additionalPrices && additionalPrices.length > 0) {
-      
         const processedPrices = additionalPrices.map((price, index) => {
           const priceData = {
             label: price.label,
             price: parseFloat(price.price),
             shopId: price.shopId || null,
-            isBox: price.isBox === 'true' || price.isBox === true || false, // Handle isBox field
+            isBox: price.isBox === 'true' || price.isBox === true || false,
           };
           return priceData;
         });
@@ -691,12 +702,13 @@ const updateProduct = async (id, updateBody, files) => {
       include: {
         category: true,
         brand: true,
+        unitOfMeasure: true,
         AdditionalPrice: true,
       },
     });
+
     return updatedProduct;
   } catch (error) {
-  
     // Log Prisma-specific error details
     if (error.code) {
       console.error('Prisma error code:', error.code);
@@ -777,6 +789,13 @@ const getProductDetails = async (productId, userId) => {
           select: {
             id: true,
             name: true,
+          },
+        },
+        unitOfMeasure: {
+          select: {
+            id: true,
+            name: true,
+            symbol: true,
           },
         },
         AdditionalPrice: {
@@ -890,6 +909,14 @@ const getProductDetails = async (productId, userId) => {
     );
     const overallTotalQuantity = totalShopQuantity + totalStoreQuantity;
 
+    // Format unit display
+    const unitDisplay =
+      product.numberunitOfMeasure && product.unitOfMeasure?.symbol
+        ? `${product.numberunitOfMeasure} ${product.unitOfMeasure.symbol}`
+        : product.unitOfMeasure?.symbol ||
+          product.unitOfMeasure?.name ||
+          'unit';
+
     return {
       product: {
         id: product.id,
@@ -901,12 +928,16 @@ const getProductDetails = async (productId, userId) => {
         imageUrl: product.imageUrl,
         hasBox: product.hasBox,
         boxSize: product.boxSize,
-        UnitOfMeasure: product.UnitOfMeasure,
+        unitOfMeasureId: product.unitOfMeasureId,
+        numberunitOfMeasure: product.numberunitOfMeasure,
+        unitOfMeasure: product.unitOfMeasure,
+        unitDisplay,
         isActive: product.isActive,
         category: product.category,
         viscosity: product.viscosity,
         oilType: product.oilType,
         additiveType: product.additiveType,
+        warningQuantity: product.warningQuantity,
         brand: product.brand,
         createdAt: product.createdAt,
         updatedAt: product.updatedAt,
@@ -942,7 +973,6 @@ const searchProducts = async (
   categoryFilter = null,
   brandFilter = null,
 ) => {
-
   try {
     let categoryId = null;
     let brandId = null;
@@ -1017,7 +1047,6 @@ const searchProducts = async (
         }),
     };
 
-
     // Get ALL products that match the search criteria (no take/limit)
     const matchedProducts = await prisma.product.findMany({
       where: whereClause,
@@ -1057,7 +1086,6 @@ const getTopSellingProducts = async (
   categoryName = null,
   brandName = null,
 ) => {
-
   try {
     let categoryId = null;
     let brandId = null;
@@ -1110,6 +1138,7 @@ const getTopSellingProducts = async (
       include: {
         category: true,
         brand: true,
+        unitOfMeasure: true,
         AdditionalPrice: {
           include: {
             shop: {
@@ -1121,8 +1150,6 @@ const getTopSellingProducts = async (
         },
       },
     });
-
-   
 
     if (allEligibleProducts.length === 0) {
       return {
@@ -1162,7 +1189,6 @@ const getTopSellingProducts = async (
       (p) => !productIdsWithSales.includes(p.id),
     );
 
-
     // Sort products with sales by their sales quantity
     productsWithSalesData.sort((a, b) => {
       const salesA =
@@ -1176,7 +1202,7 @@ const getTopSellingProducts = async (
 
     // Combine: First show top sellers, then fill with random products up to 20
     const MAX_PRODUCTS = 20;
-    let finalProducts = [...productsWithSalesData];
+    const finalProducts = [...productsWithSalesData];
 
     if (
       finalProducts.length < MAX_PRODUCTS &&
@@ -1194,9 +1220,7 @@ const getTopSellingProducts = async (
 
       const needed = MAX_PRODUCTS - finalProducts.length;
       finalProducts.push(...shuffledWithoutSales.slice(0, needed));
-    
     }
-
 
     return {
       products: finalProducts.map((product) => ({ product })),
@@ -1279,7 +1303,6 @@ const getRandomProductsWithShopStocks = async (userId = null) => {
   };
 };
 const getProductByShops = async (productId) => {
-
   try {
     // Get all available shop stocks for the product
     const shopStocks = await prisma.shopStock.findMany({
@@ -1303,27 +1326,42 @@ const getProductByShops = async (productId) => {
                 OR: [{ shopId: null }, { shopId: { not: null } }],
               },
             },
+            unitOfMeasure: true, // Include unitOfMeasure relation
           },
         },
       },
     });
 
-
     // If no shop stocks found, return empty response instead of throwing error
     if (!shopStocks || shopStocks.length === 0) {
-      
-
       // Get product details even if no stock
       const product = await prisma.product.findUnique({
         where: { id: productId },
         select: {
           hasBox: true,
           boxSize: true,
-          UnitOfMeasure: true,
+          unitOfMeasureId: true,
+          numberunitOfMeasure: true,
           name: true,
           productCode: true,
+          unitOfMeasure: {
+            select: {
+              name: true,
+              symbol: true,
+            },
+          },
         },
       });
+
+      // Format unit of measure display string
+      const unitDisplay =
+        product?.numberunitOfMeasure && product?.unitOfMeasure
+          ? `${product.numberunitOfMeasure} ${
+              product.unitOfMeasure.symbol || product.unitOfMeasure.name
+            }`
+          : product?.unitOfMeasure?.symbol ||
+            product?.unitOfMeasure?.name ||
+            'unit';
 
       return {
         totalAvailableQuantity: 0,
@@ -1332,7 +1370,11 @@ const getProductByShops = async (productId) => {
         product: {
           hasBox: product?.hasBox || false,
           boxSize: product?.boxSize || null,
-          UnitOfMeasure: product?.UnitOfMeasure || 'unit',
+          unitOfMeasureId: product?.unitOfMeasureId,
+          numberunitOfMeasure: product?.numberunitOfMeasure,
+          unitDisplay,
+          unitSymbol: product?.unitOfMeasure?.symbol,
+          unitName: product?.unitOfMeasure?.name,
           name: product?.name,
           productCode: product?.productCode,
         },
@@ -1364,16 +1406,14 @@ const getProductByShops = async (productId) => {
       },
     });
 
-
     // Calculate reserved quantities by shop (in pieces)
     const reservedQuantitiesByShop = new Map();
 
-    pendingSells.forEach((sell, sellIndex) => {
-      sell.items.forEach((item, itemIndex) => {
+    pendingSells.forEach((sell) => {
+      sell.items.forEach((item) => {
         if (item.productId === productId && item.itemSaleStatus === 'PENDING') {
           const currentReserved =
             reservedQuantitiesByShop.get(item.shopId) || 0;
-       
           reservedQuantitiesByShop.set(
             item.shopId,
             currentReserved + item.quantity,
@@ -1382,29 +1422,46 @@ const getProductByShops = async (productId) => {
       });
     });
 
-  
-
     // Aggregate quantities by shop and collect additional prices
     const shopsMap = new Map();
     let totalAvailableQuantity = 0;
 
-    shopStocks.forEach((stock, stockIndex) => {
-     
-
+    shopStocks.forEach((stock) => {
       const reservedQuantity = reservedQuantitiesByShop.get(stock.shopId) || 0;
-
       const netAvailableQuantity = Math.max(
         0,
         stock.quantity - reservedQuantity,
       );
-
       totalAvailableQuantity += netAvailableQuantity;
+
+      // Get unit display for this product
+      const unitDisplay =
+        stock.product.numberunitOfMeasure && stock.product.unitOfMeasure
+          ? `${stock.product.numberunitOfMeasure} ${
+              stock.product.unitOfMeasure.symbol ||
+              stock.product.unitOfMeasure.name
+            }`
+          : stock.product.unitOfMeasure?.symbol ||
+            stock.product.unitOfMeasure?.name ||
+            'unit';
 
       if (shopsMap.has(stock.shop.id)) {
         const existingShop = shopsMap.get(stock.shop.id);
         existingShop.quantity += netAvailableQuantity;
-      } else {
 
+        // Update box calculations if needed
+        if (
+          existingShop.hasBox &&
+          existingShop.boxSize &&
+          existingShop.boxSize > 0
+        ) {
+          existingShop.availableBoxes = Math.floor(
+            existingShop.quantity / existingShop.boxSize,
+          );
+          existingShop.remainingPieces =
+            existingShop.quantity % existingShop.boxSize;
+        }
+      } else {
         // Get base product price
         const basePrice = stock.product.sellPrice;
 
@@ -1422,7 +1479,6 @@ const getProductByShops = async (productId) => {
             0,
           );
           totalPrice = base + additionalTotal;
-        
         }
 
         // Calculate box availability if product supports boxes
@@ -1430,7 +1486,6 @@ const getProductByShops = async (productId) => {
         let remainingPieces = netAvailableQuantity;
         let boxSize = null;
 
-      
         if (
           stock.product.hasBox &&
           stock.product.boxSize &&
@@ -1439,7 +1494,6 @@ const getProductByShops = async (productId) => {
           boxSize = stock.product.boxSize;
           availableBoxes = Math.floor(netAvailableQuantity / boxSize);
           remainingPieces = netAvailableQuantity % boxSize;
-         
         }
 
         const shopData = {
@@ -1459,7 +1513,11 @@ const getProductByShops = async (productId) => {
             isBox: ap.isBox,
           })),
           totalPrice,
-          UnitOfMeasure: stock.product.UnitOfMeasure,
+          unitDisplay,
+          unitSymbol: stock.product.unitOfMeasure?.symbol,
+          unitName: stock.product.unitOfMeasure?.name,
+          numberunitOfMeasure: stock.product.numberunitOfMeasure,
+          unitOfMeasureId: stock.product.unitOfMeasureId,
         };
 
         shopsMap.set(stock.shop.id, shopData);
@@ -1472,12 +1530,28 @@ const getProductByShops = async (productId) => {
       select: {
         hasBox: true,
         boxSize: true,
-        UnitOfMeasure: true,
+        unitOfMeasureId: true,
+        numberunitOfMeasure: true,
         name: true,
         productCode: true,
+        unitOfMeasure: {
+          select: {
+            name: true,
+            symbol: true,
+          },
+        },
       },
     });
 
+    // Format unit of measure display string
+    const unitDisplay =
+      product?.numberunitOfMeasure && product?.unitOfMeasure
+        ? `${product.numberunitOfMeasure} ${
+            product.unitOfMeasure.symbol || product.unitOfMeasure.name
+          }`
+        : product?.unitOfMeasure?.symbol ||
+          product?.unitOfMeasure?.name ||
+          'unit';
 
     const result = {
       totalAvailableQuantity,
@@ -1486,7 +1560,11 @@ const getProductByShops = async (productId) => {
       product: {
         hasBox: product?.hasBox || false,
         boxSize: product?.boxSize || null,
-        UnitOfMeasure: product?.UnitOfMeasure || 'unit',
+        unitOfMeasureId: product?.unitOfMeasureId,
+        numberunitOfMeasure: product?.numberunitOfMeasure,
+        unitDisplay,
+        unitSymbol: product?.unitOfMeasure?.symbol,
+        unitName: product?.unitOfMeasure?.name,
         name: product?.name,
         productCode: product?.productCode,
       },
@@ -1494,7 +1572,6 @@ const getProductByShops = async (productId) => {
 
     return result;
   } catch (error) {
- 
     if (error.code) {
       console.error('Prisma error code:', error.code);
     }

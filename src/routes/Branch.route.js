@@ -27,7 +27,6 @@ router.get(
 );
 router.get(
   '/api/branches/:id',
-  auth,
   checkPermission('VIEW_BRANCH'),
   branchController.getBranch,
 );

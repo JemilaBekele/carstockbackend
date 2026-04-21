@@ -19,6 +19,7 @@ const getSellById = async (identifier) => {
           product: {
             include: {
               category: true,
+              unitOfMeasure: true,
             },
           },
           shop: true,
@@ -1070,8 +1071,6 @@ const completeSaleDelivery = async (saleId, deliveryData, userId) => {
         newItemStatus = 'PARTIALLY_DELIVERED';
       }
 
-   
-
       if (givenQty <= 0) {
         throw new ApiError(
           httpStatus.BAD_REQUEST,
@@ -1279,7 +1278,6 @@ const completeSaleDelivery = async (saleId, deliveryData, userId) => {
   });
 };
 const deliverAllSaleItems = async (saleId, deliveryData, userId) => {
-
   const sell = await getSellById(saleId);
 
   if (!sell) {
@@ -1313,7 +1311,6 @@ const deliverAllSaleItems = async (saleId, deliveryData, userId) => {
     ) {
       // Calculate correct remaining quantity
       actualRemaining = item.quantity - (item.givenQuantity || 0);
-      
     }
     // If remainingQuantity is null/undefined, calculate from quantity and givenQuantity
     else if (
@@ -1391,7 +1388,6 @@ const deliverAllSaleItems = async (saleId, deliveryData, userId) => {
 };
 
 const partialSaleDelivery = async (saleId, deliveryData, userId) => {
-
   return completeSaleDelivery(saleId, deliveryData, userId);
 };
 
@@ -1534,7 +1530,6 @@ const updateSaleStatus = async (saleId, newStatus, userId) => {
       usersWithShopAccess.forEach((user) => {
         // Send to each user individually - remove 'user:' prefix
         io.to(user.id).emit('new-notification', realTimeNotification);
-      
 
         // Also send to user's shops for additional targeting
         user.shops.forEach((shop) => {
@@ -1550,8 +1545,6 @@ const updateSaleStatus = async (saleId, newStatus, userId) => {
       const successfulShopCount = shopNotifications.filter(
         (result) => result.status === 'fulfilled',
       ).length;
-
-     
     } catch (notificationError) {
       console.error(
         `❌ Unexpected error in ${newStatus.toLowerCase()} notification process:`,
@@ -1727,8 +1720,6 @@ const cancelSale = async (saleId, userId) => {
     const successfulShopCount = shopNotifications.filter(
       (result) => result.status === 'fulfilled',
     ).length;
-
- 
   } catch (notificationError) {
     console.error(
       '❌ Unexpected error in cancellation notification process:',
@@ -3254,8 +3245,6 @@ const addSellPayment = async (sellId, paymentData, userId) => {
 
       return { payment, sell: updatedSell };
     });
-
-  
 
     return result;
   } catch (error) {

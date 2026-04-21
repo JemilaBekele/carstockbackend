@@ -15,11 +15,15 @@ const getTransferById = async (id) => {
       destShop: true,
       createdBy: true,
       updatedBy: true,
-      items: {
-        include: {
-          product: true,
+         items: {
+          include: {
+            product: {
+              include: {
+                unitOfMeasure: true, 
+              },
+            },
+          },
         },
-      },
     },
   });
   return transfer;
@@ -853,11 +857,8 @@ const completeTransfer = async (transferId, userId) => {
         }
 
         pieceQuantity = item.quantity * product.boxSize;
-
-      
       } else {
         pieceQuantity = item.quantity;
-       
       }
 
       // Validate piece quantity is positive
@@ -899,7 +900,6 @@ const completeTransfer = async (transferId, userId) => {
         }
 
         const newSourceQuantity = sourceStock.quantity - pieceQuantity;
-      
 
         sourceOperations.push(
           tx.storeStock.update({
@@ -958,7 +958,6 @@ const completeTransfer = async (transferId, userId) => {
         }
 
         const newSourceQuantity = sourceStock.quantity - pieceQuantity;
-   
 
         sourceOperations.push(
           tx.shopStock.update({
@@ -1071,8 +1070,6 @@ const completeTransfer = async (transferId, userId) => {
           }),
         );
       }
-
-    
     }
 
     // Execute all operations in parallel
@@ -1092,8 +1089,6 @@ const completeTransfer = async (transferId, userId) => {
         totalPiecesTransferred += item.quantity;
       }
     }
-
-
 
     // Update transfer status to COMPLETED
     const updatedTransfer = await tx.transfer.update({

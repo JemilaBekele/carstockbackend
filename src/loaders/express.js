@@ -14,7 +14,6 @@ const documentRouter = require('../routes/document.route');
 const rolesRouter = require('../routes/role.route');
 const permissionRouter = require('../routes/permission.route');
 const rolePermissionRouter = require('../routes/rolePermission.route');
-
 const MissingStockLedger = require('../routes/MissingStockLedger.route');
 const CategoryRouter = require('../routes/Category.route');
 const branchRouter = require('../routes/Branch.route');

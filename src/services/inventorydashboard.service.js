@@ -79,8 +79,7 @@ class InventoryDashboardService {
           2
         ) as stockPercentage,
         p.hasBox,
-        p.boxSize,
-        p.UnitOfMeasure
+        p.boxSize
       FROM products p
       INNER JOIN categories c ON p.categoryId = c._id
       LEFT JOIN brands b ON p.brandId = b._id
@@ -102,7 +101,7 @@ class InventoryDashboardService {
           (COALESCE(store_stock.total_qty, 0) + COALESCE(shop_stock.total_qty, 0)) <= p.warningQuantity
           OR (COALESCE(store_stock.total_qty, 0) + COALESCE(shop_stock.total_qty, 0)) = 0
         )
-      GROUP BY p._id, p.name, p.productCode, p.warningQuantity, c.name, b.name, p.hasBox, p.boxSize, p.UnitOfMeasure
+      GROUP BY p._id, p.name, p.productCode, p.warningQuantity, c.name, b.name, p.hasBox, p.boxSize
       ORDER BY 
         CASE 
           WHEN (COALESCE(store_stock.total_qty, 0) + COALESCE(shop_stock.total_qty, 0)) = 0 THEN 0
@@ -137,8 +136,7 @@ class InventoryDashboardService {
         p.sellPrice as unitPrice,
         (COALESCE(store_stock.total_qty, 0) + COALESCE(shop_stock.total_qty, 0)) * p.sellPrice as totalValue,
         p.hasBox,
-        p.boxSize,
-        p.UnitOfMeasure
+        p.boxSize
       FROM products p
       INNER JOIN categories c ON p.categoryId = c._id
       LEFT JOIN brands b ON p.brandId = b._id
@@ -155,7 +153,7 @@ class InventoryDashboardService {
         GROUP BY productId
       ) as shop_stock ON p._id = shop_stock.productId
       WHERE (COALESCE(store_stock.total_qty, 0) + COALESCE(shop_stock.total_qty, 0)) > 0
-      GROUP BY p._id, p.name, p.productCode, c.name, b.name, p.sellPrice, p.hasBox, p.boxSize, p.UnitOfMeasure
+      GROUP BY p._id, p.name, p.productCode, c.name, b.name, p.sellPrice, p.hasBox, p.boxSize
       ORDER BY totalValue DESC
       LIMIT ${limit}
     `;
@@ -186,14 +184,13 @@ class InventoryDashboardService {
         AVG(si.unitPrice) as avgPrice,
         COUNT(DISTINCT si.sellId) as numberOfSales,
         p.hasBox,
-        p.boxSize,
-        p.UnitOfMeasure
+        p.boxSize
       FROM sell_items si
       INNER JOIN products p ON si.productId = p._id
       INNER JOIN categories c ON p.categoryId = c._id
       LEFT JOIN brands b ON p.brandId = b._id
       WHERE si.itemSaleStatus = 'DELIVERED'
-      GROUP BY p._id, p.name, p.productCode, c.name, b.name, p.hasBox, p.boxSize, p.UnitOfMeasure
+      GROUP BY p._id, p.name, p.productCode, c.name, b.name, p.hasBox, p.boxSize
       ORDER BY totalQuantitySold DESC
       LIMIT ${limit}
     `;
@@ -224,15 +221,14 @@ class InventoryDashboardService {
         AVG(pi.unitPrice) as avgCost,
         COUNT(DISTINCT pi.purchaseId) as numberOfPurchases,
         p.hasBox,
-        p.boxSize,
-        p.UnitOfMeasure
+        p.boxSize
       FROM purchase_items pi
       INNER JOIN purchases pu ON pi.purchaseId = pu._id
       INNER JOIN products p ON pi.productId = p._id
       INNER JOIN categories c ON p.categoryId = c._id
       LEFT JOIN brands b ON p.brandId = b._id
       WHERE pu.paymentStatus = 'APPROVED'
-      GROUP BY p._id, p.name, p.productCode, c.name, b.name, p.hasBox, p.boxSize, p.UnitOfMeasure
+      GROUP BY p._id, p.name, p.productCode, c.name, b.name, p.hasBox, p.boxSize
       ORDER BY totalQuantityPurchased DESC
       LIMIT ${limit}
     `;
@@ -251,8 +247,6 @@ class InventoryDashboardService {
   // Get inventory aging report (oldest stock first)
   static async _getInventoryAgingReport(tx, limit = 50) {
     try {
-      // Get products with their stock quantities and age based on product creation date
-      // Use created_at instead of createdAt for MySQL column name
       const result = await tx.$queryRaw`
       SELECT 
         p._id as id,
@@ -266,7 +260,6 @@ class InventoryDashboardService {
         b.name as brandName,
         p.hasBox,
         p.boxSize,
-        p.UnitOfMeasure,
         p.sellPrice as unitPrice
       FROM products p
       INNER JOIN categories c ON p.categoryId = c._id
@@ -284,7 +277,7 @@ class InventoryDashboardService {
         GROUP BY productId
       ) as shop_stock ON p._id = shop_stock.productId
       WHERE (COALESCE(store_stock.total_qty, 0) + COALESCE(shop_stock.total_qty, 0)) > 0
-      GROUP BY p._id, p.name, p.productCode, p.created_at, c.name, b.name, p.sellPrice, p.hasBox, p.boxSize, p.UnitOfMeasure
+      GROUP BY p._id, p.name, p.productCode, p.created_at, c.name, b.name, p.sellPrice, p.hasBox, p.boxSize
       ORDER BY daysInInventory DESC
       LIMIT ${limit}
     `;

@@ -14,7 +14,11 @@ const getPurchaseById = async (id) => {
       updatedBy: true,
       items: {
         include: {
-          product: true,
+          product: {
+            include: {
+              unitOfMeasure: true,
+            },
+          },
         },
       },
     },
@@ -573,14 +577,14 @@ const acceptPurchase = async (purchaseId, paymentStatus, userId) => {
     if (!purchase.storeId && !purchase.shopId) {
       throw new ApiError(
         httpStatus.BAD_REQUEST,
-        'Purchase must be associated with either a store or a shop'
+        'Purchase must be associated with either a store or a shop',
       );
     }
 
     if (purchase.storeId && purchase.shopId) {
       throw new ApiError(
         httpStatus.BAD_REQUEST,
-        'Purchase cannot be associated with both a store and a shop'
+        'Purchase cannot be associated with both a store and a shop',
       );
     }
 
@@ -615,7 +619,7 @@ const acceptPurchase = async (purchaseId, paymentStatus, userId) => {
       const result = await prisma.$transaction(async (tx) => {
         // Get all existing stocks in one query based on location type
         const productIds = purchase.items.map((item) => item.productId);
-        
+
         let existingStocks = [];
         let existingStockMap = {};
 
@@ -627,7 +631,7 @@ const acceptPurchase = async (purchaseId, paymentStatus, userId) => {
               productId: { in: productIds },
             },
           });
-          
+
           existingStockMap = existingStocks.reduce((acc, stock) => {
             acc[stock.productId] = stock;
             return acc;
@@ -640,7 +644,7 @@ const acceptPurchase = async (purchaseId, paymentStatus, userId) => {
               productId: { in: productIds },
             },
           });
-          
+
           existingStockMap = existingStocks.reduce((acc, stock) => {
             acc[stock.productId] = stock;
             return acc;
@@ -686,7 +690,7 @@ const acceptPurchase = async (purchaseId, paymentStatus, userId) => {
 
           // Stock operations (store or shop)
           const existingStock = existingStockMap[product.id];
-          
+
           if (isStore) {
             // Handle store stock
             if (existingStock) {
@@ -754,8 +758,18 @@ const acceptPurchase = async (purchaseId, paymentStatus, userId) => {
                 reference: purchase.invoiceNo,
                 userId,
                 notes: isBox
-                  ? `Purchase acceptance - ${purchase.invoiceNo} (${quantity} box(es) × ${product.boxSize} = ${pieceQuantity} pieces) - ${locationType}: ${isStore ? purchase.store?.name : purchase.shop?.name}`
-                  : `Purchase acceptance - ${purchase.invoiceNo} (${quantity} piece(s)) - ${locationType}: ${isStore ? purchase.store?.name : purchase.shop?.name}`,
+                  ? `Purchase acceptance - ${
+                      purchase.invoiceNo
+                    } (${quantity} box(es) × ${
+                      product.boxSize
+                    } = ${pieceQuantity} pieces) - ${locationType}: ${
+                      isStore ? purchase.store?.name : purchase.shop?.name
+                    }`
+                  : `Purchase acceptance - ${
+                      purchase.invoiceNo
+                    } (${quantity} piece(s)) - ${locationType}: ${
+                      isStore ? purchase.store?.name : purchase.shop?.name
+                    }`,
                 movementDate: purchase.purchaseDate,
               },
             }),
@@ -780,7 +794,11 @@ const acceptPurchase = async (purchaseId, paymentStatus, userId) => {
         // Create log entry
         await tx.log.create({
           data: {
-            action: `Accepted purchase ${purchase.invoiceNo} with ${purchase.items.length} items. Total pieces added: ${totalPiecesAdded} to ${locationType}: ${isStore ? purchase.store?.name : purchase.shop?.name}`,
+            action: `Accepted purchase ${purchase.invoiceNo} with ${
+              purchase.items.length
+            } items. Total pieces added: ${totalPiecesAdded} to ${locationType}: ${
+              isStore ? purchase.store?.name : purchase.shop?.name
+            }`,
             userId,
           },
         });

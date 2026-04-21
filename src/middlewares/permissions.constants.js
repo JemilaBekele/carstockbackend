@@ -80,6 +80,24 @@ module.exports = {
     },
     DELETE: { name: 'DELETE_COMPANY', description: 'Delete companies' },
   },
+  UNIT_OF_MEASURE: {
+    CREATE: {
+      name: 'CREATE_UNIT_OF_MEASURE',
+      description: 'Create new unit of measure',
+    },
+    VIEW_ALL: {
+      name: 'VIEW_ALL_UNIT_OF_MEASURE',
+      description: 'View all unit of measure',
+    },
+    UPDATE: {
+      name: 'UPDATE_UNIT_OF_MEASURE',
+      description: 'Update unit of measure information',
+    },
+    DELETE: {
+      name: 'DELETE_UNIT_OF_MEASURE',
+      description: 'Delete unit of measure',
+    },
+  },
   SUPPLIER: {
     CREATE: {
       name: 'CREATE_SUPPLIER',

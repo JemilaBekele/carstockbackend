@@ -442,7 +442,7 @@ const getCustomerSells = async (customerId, filters = {}) => {
                 sellPrice: true,
                 hasBox: true,
                 boxSize: true,
-                UnitOfMeasure: true,
+                unitOfMeasure: true,
                 category: {
                   select: {
                     id: true,
@@ -891,7 +891,7 @@ const getSupplierPurchases = async (supplierId, filters = {}) => {
                 sellPrice: true,
                 hasBox: true,
                 boxSize: true,
-                UnitOfMeasure: true,
+                unitOfMeasure: true,
                 category: {
                   select: {
                     id: true,
