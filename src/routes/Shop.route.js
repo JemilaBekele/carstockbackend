@@ -32,7 +32,6 @@ router.get(
 );
 router.get(
   '/api/shops/get/all',
-  auth,
   // checkPermission('VIEW_SHOP'),
   shopController.getAllshop,
 );

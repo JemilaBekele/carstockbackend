@@ -34,7 +34,7 @@ router.get(
 // Get all branches
 router.get(
   '/api/branches',
-  auth,
+  // auth,
   // checkPermission('VIEW_BRANCH'),
   branchController.getBranches,
 );

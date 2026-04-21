@@ -35,8 +35,7 @@ const getShops = catchAsync(async (req, res) => {
   });
 });
 const getAllshop = catchAsync(async (req, res) => {
-  const userId = req.user.id; // ✅ extract userId
-  const result = await shopService.getAllshop(userId);
+  const result = await shopService.getAllshop();
   res.status(httpStatus.OK).send({
     success: true,
     ...result,

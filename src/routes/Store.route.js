@@ -16,7 +16,6 @@ router.post(
 );
 router.get(
   '/api/stores/get/all',
-  auth,
   // checkPermission('CREATE_STORE'),
   storeController.getAllStore,
 );

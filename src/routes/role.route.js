@@ -6,7 +6,7 @@ const { roleController } = require('../controllers');
 
 // Role Routes
 router.post('/api/roles', roleController.createRole);
-router.get('/api/roles', auth, roleController.getAllRoles);
+router.get('/api/roles', roleController.getAllRoles);
 router.get('/api/roles/:id', roleController.getRoleById);
 // router.get('/api/roles/name/:name', auth, roleController.getRoleByName);
 router.put('/api/roles/:id', auth, roleController.updateRole);
