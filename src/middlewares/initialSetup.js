@@ -82,7 +82,7 @@ class SystemInitializer {
     try {
       const adminData = {
         name: 'System Admin',
-        email: 'admbfn@example.com',
+        email: 'admwbfn@example.com',
         password: process.env.ADMIN_PASSWORD || 'Admin@1234',
         roleId: adminRole.id,
         status: 'Active',

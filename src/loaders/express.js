@@ -35,6 +35,7 @@ const SellStockCorrRouter = require('../routes/SellStockCorrect.route');
 const ReportRouter = require('../routes/Report.route');
 const InventoryDashboardRouter = require('../routes/inventorydashboard.route');
 const { errorHandler, errorConverter } = require('../middlewares/error');
+const performaRouter = require('../routes/Proforma.route');
 const ApiError = require('../utils/ApiError');
 const morgan = require('../config/morgan');
 const { jwtStrategy } = require('../config/passport');
@@ -128,6 +129,7 @@ module.exports = async (app) => {
   app.use(SellStockCorrRouter);
   app.use(ReportRouter);
   app.use(InventoryDashboardRouter);
+  app.use(performaRouter);
   // Error handling middleware
   // Then your 404 handler
   // 404 handler - MODIFY THIS

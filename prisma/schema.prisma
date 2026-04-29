@@ -50,6 +50,8 @@ model User {
   sellPayments              SellPayment[]
 
   @@map("users")
+  proformas Proforma[] @relation(name: "ProformaCreator")
+  updateproformas Proforma[] @relation("ProformaUpdater")
 }
 
 model Role {
@@ -136,6 +138,7 @@ model Shop {
   purchases               Purchase[]
 
   @@map("shops")
+  proformas Proforma[]
 }
 
 model Store {
@@ -277,6 +280,7 @@ model Customer {
   Sell        Sell[]
 
   @@map("customers")
+  proformas Proforma[]
 }
 
 model Supplier {
@@ -364,6 +368,7 @@ model Product {
   stockLedgers            StockLedger[]
 
   @@map("products")
+  proformaItems ProformaItem[]
 }
 
 model UnitOfMeasure {
@@ -452,7 +457,73 @@ enum PaymentStatus {
   APPROVED
   REJECTED
 }
+model Proforma {
+  id          String   @id @default(uuid()) @map("_id") @db.Char(36)
+  proformaNo  String   @unique
+  imageUrl    String?
+  documentUrl String?
 
+  customerId String   @db.Char(36)
+  customer   Customer @relation(fields: [customerId], references: [id])
+
+  shopId String? @db.Char(36)
+  shop   Shop?  @relation(fields: [shopId], references: [id])
+
+  status ProformaStatus @default(PENDING)
+
+  totalProducts Int   @default(0)
+  subTotal      Float @default(0)
+  discount      Float @default(0)
+  tax           Float @default(0)
+  grandTotal    Float @default(0)
+
+  notes String?
+
+  validUntil DateTime?
+  proformaDate DateTime @default(now())
+
+  createdBy   User?   @relation(fields: [createdById], references: [id], name: "ProformaCreator")
+  createdById String? @db.Char(36)
+
+  updatedById String? @db.Char(36)
+  updatedBy   User?   @relation("ProformaUpdater", fields: [updatedById], references: [id])
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  items ProformaItem[]
+
+  @@map("proformas")
+}
+model ProformaItem {
+  id         String   @id @default(uuid()) @map("_id") @db.Char(36)
+  proformaId String   @db.Char(36)
+  proforma   Proforma @relation(fields: [proformaId], references: [id])
+
+  productId String  @db.Char(36)
+  product   Product @relation(fields: [productId], references: [id])
+
+  // Box or Piece
+  isBox Boolean @default(false)
+
+  quantity   Int
+  unitPrice  Float @default(0)
+  totalPrice Float @default(0)
+
+  discount Float @default(0)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("proforma_items")
+}
+enum ProformaStatus {
+  PENDING      // created but not approved
+  APPROVED     // confirmed by admin
+  REJECTED     // rejected
+  CONVERTED    // converted to Sale/Invoice
+  EXPIRED      // validity passed
+}
 enum TaxType {
   PERCENT
   FIXED

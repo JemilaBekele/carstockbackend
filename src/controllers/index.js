@@ -28,3 +28,4 @@ module.exports.cartController = require('./Cart.controller');
 module.exports.yearEndResetController = require('./yearEndReset.controller');
 module.exports.stockLedgerReconciliationController = require('./MissingStockLedger.controller');
 module.exports.brandController = require('./Brand.controller');
+module.exports.proformaController = require('./Proforma.controller');

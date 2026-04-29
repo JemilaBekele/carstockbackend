@@ -29,3 +29,4 @@ module.exports.yearEndResetService = require('./yearEndReset.service');
 module.exports.factoryResetService = require('./factoryReset.service');
 module.exports.stockLedgerReconciliationService = require('./MissingStockLedger.service');
 module.exports.brandService = require('./Brand.service');
+module.exports.proformaService = require('./Proforma.service');
